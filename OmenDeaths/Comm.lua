@@ -65,12 +65,13 @@ end
 local function Text(s) if s ~= nil and s ~= "" then return s end end
 
 -- Health report. The error text gets what is left of MAX_LEN after the other fields:
--- "H" 1 + name 25 + version 10 + logged 2 + missed 2 + step 8 + errors 6 + post 7 + 8 separators = 69.
--- post comes last: older versions read 8 fields and leave it.
-Comm.HEALTH_TEXT_LEN = Comm.MAX_LEN - 69
+-- "H" 1 + name 25 + version 10 + logged 2 + missed 2 + step 8 + errors 6 + post 12 + 8 separators = 74.
+-- post ("arrived/0.50") comes last: older versions read 8 fields and leave it.
+Comm.HEALTH_POST_LEN = 12
+Comm.HEALTH_TEXT_LEN = Comm.MAX_LEN - 74
 function Comm.EncodeHealth(owner, h)
     return table.concat({ "H", Clean(owner, Comm.NAME_LEN), Clean(h.v, 10), tostring(h.n or 0), tostring(h.miss or 0),
-        Clean(h.step, 8), tostring(h.err or 0), Clean(h.text, Comm.HEALTH_TEXT_LEN), Clean(h.post, 7) }, "|")
+        Clean(h.step, 8), tostring(h.err or 0), Clean(h.text, Comm.HEALTH_TEXT_LEN), Clean(h.post, Comm.HEALTH_POST_LEN) }, "|")
 end
 
 function Comm.DecodeHealth(msg)

@@ -24,7 +24,8 @@ function Health.Mine()
         end
     end
     local err = db.errors or {}
-    local post = db.lastPost and db.lastPost.r
+    local lp = db.lastPost
+    local post = lp and lp.r and (lp.r .. (lp.echo and ("/" .. string.format("%.2f", lp.echo)) or ""))
     return { v = ns.VERSION, n = #log, miss = missed, step = step, err = err.n or 0, text = err.text, post = post }
 end
 
@@ -64,8 +65,19 @@ Health.POST_TEXT = {
     sent = "sent", off = "not sent: Guild chat is Off", bg = "not sent: battleground (No BG)",
     boss = "not sent: counted as a boss fight", wait = "waiting: the game holds chat back",
     queued = "about to be sent", err = "failed: the game refused it (see latest error)",
-    noguild = "not sent: not in a guild",
+    noguild = "not sent: not in a guild", sent = "sent, not seen in guild chat yet",
+    arrived = "arrived in guild chat", retried = "arrived after a second try (at a click)",
+    lost = "did not arrive, also not after a second try",
 }
+Health.POST_BAD = { err = true, boss = true, lost = true }
+
+-- "arrived/0.50" -> "arrived in guild chat (after 0.50 s)", bad
+function Health.PostText(post)
+    local code, echo = post:match("^([^/]+)/?(.*)$")
+    local text = Health.POST_TEXT[code] or code
+    if echo and echo ~= "" then text = text .. " (after " .. echo .. " s)" end
+    return text, Health.POST_BAD[code] == true
+end
 
 -- One line about a report: "v0.8.0 · 1 of 20 deaths without a cause (stopped at latest) · 0 errors".
 function Health.Line(h)

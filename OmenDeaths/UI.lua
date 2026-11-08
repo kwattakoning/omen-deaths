@@ -396,8 +396,8 @@ local function HealthTooltip(row)
     GameTooltip:AddLine("Errors in the addon: " .. (h.err or 0), 0.85, 0.85, 0.85)
     if h.text then GameTooltip:AddLine("Latest error: " .. h.text, 1, 0.5, 0.5, true) end
     if h.post then
-        local bad = h.post == "err" or h.post == "boss"
-        GameTooltip:AddLine("Guild chat, latest death: " .. (ns.Health.POST_TEXT[h.post] or h.post),
+        local text, bad = ns.Health.PostText(h.post)
+        GameTooltip:AddLine("Guild chat, latest death: " .. text,
             bad and 1 or 0.85, bad and 0.6 or 0.85, bad and 0.2 or 0.85, true)
     end
 end
