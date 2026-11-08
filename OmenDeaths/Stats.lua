@@ -11,6 +11,10 @@ local Stats = {}
 ns.Stats = Stats
 
 Stats.TOTAL_DEATHS = 60
+-- "Deaths in <battleground>" in the Battlegrounds part of the Deaths category (statDump 08-11-2026):
+-- 56 Warsong Gulch, 57 Alterac Valley, 59 Arathi Basin, 64182 Darkspear Islands. Not 593 "Deaths
+-- from Vanndar Stormpike": those are Alterac Valley deaths already, counting it would count twice.
+Stats.BG_DEATHS = { 56, 57, 59, 64182 }
 Stats.LOGIN_DELAY = 10
 
 -- "1,234" -> 1234; "--" (never happened) -> 0; anything else -> nil
@@ -66,6 +70,12 @@ function Stats.Read()
     if not total then return nil end
     local me = ns.MyName()
     if not me then return nil end
+    local bg = 0
+    for _, id in ipairs(Stats.BG_DEATHS) do
+        local n = Stats.Number(ns.Call(GetStatistic, id))
+        if not n then bg = nil break end
+        bg = bg + n
+    end
     if not dumped then
         dumped = true
         local list = Stats.Dump()
@@ -74,9 +84,10 @@ function Stats.Read()
     local book = ns.Book()
     local p = book.players[me]
     -- the statistic only goes up; a lower answer means it has not loaded yet
-    if p and p.stat and total <= p.stat.total then return total end
+    -- (unless the stored reading lacks the battleground part: saved by an older version)
+    if p and p.stat and total <= p.stat.total and (bg == nil or p.stat.bg ~= nil) then return total end
     local _, class = ns.Call(UnitClass, "player")
-    ns.Data.SetStat(book, me, total, ns.Now(), class)
+    ns.Data.SetStat(book, me, math.max(total, p and p.stat and p.stat.total or 0), ns.Now(), class, bg)
     ns.Comm.SendStat(me)
     ns.Changed()
     return total

@@ -39,27 +39,68 @@ function Data.Add(book, owner, rec, authoritative)
     return changed and "updated" or nil
 end
 
--- The game's own "Total deaths" statistic of a player: { total, at = server time it was read }.
+-- The game's own "Total deaths" statistic of a player: { total, at = server time it was read,
+-- bg = of those, deaths in battlegrounds (nil = not known, sent by v0.8.4 and later) }.
 -- Counts from the character's first day, so it covers deaths from before the addon.
 -- A newer reading wins; returns true when it was taken.
-function Data.SetStat(book, owner, total, at, class)
+function Data.SetStat(book, owner, total, at, class, bg)
     if type(owner) ~= "string" or owner == "" or type(total) ~= "number" or type(at) ~= "number" then return false end
+    if type(bg) ~= "number" or bg < 0 or bg > total then bg = nil end
     local p = book.players[owner]
     if not p then
         p = { deaths = {} }
         book.players[owner] = p
     end
     if class and class ~= "" and not p.class then p.class = class end
+    -- the same reading again, now with the battleground part (an older version passed it on without)
+    if p.stat and p.stat.at == at and p.stat.bg == nil and bg then
+        p.stat.bg = bg
+        return true
+    end
     if p.stat and p.stat.at >= at then return false end
-    p.stat = { total = total, at = at }
+    p.stat = { total = total, at = at, bg = bg }
     return true
 end
 
--- All Time, everywhere: the game's statistic fills in deaths from before the addon.
+-- All Time: the game's statistic fills in deaths from before the addon. Everywhere = all deaths
+-- minus those in battlegrounds (Everywhere leaves battlegrounds out); Battlegrounds = those.
+-- Other places and periods: nil, the statistic has no date and no zone.
 local function UsesStats(period, scope)
-    return period == "all" and (scope == nil or scope.kind == "all")
+    local kind = scope and scope.kind or "all"
+    return period == "all" and (kind == "all" or kind == "pvp")
 end
 Data.UsesStats = UsesStats
+function Data.StatCount(stat, period, scope)
+    if not stat or not UsesStats(period, scope) then return nil end
+    if scope and scope.kind == "pvp" then return stat.bg end
+    return stat.total - (stat.bg or 0)
+end
+
+-- Who is in the guild now (from the guild roster, Comm.ReadRoster). Players who left keep their
+-- deaths in the book but are not shown. nil = roster not read yet: everyone is shown.
+Data.members = nil
+function Data.SetMembers(guild, names)
+    local m = { guild = guild, full = {}, first = {}, loose = {} }
+    for _, name in ipairs(names) do
+        m.full[name] = true
+        local first = ns.FirstName(name)
+        if first then
+            m.first[first] = true
+            -- a roster name without surname matches any surname (as ns.SameChar)
+            if not name:find(" ", 1, true) then m.loose[first] = true end
+        end
+    end
+    Data.members = m
+end
+function Data.Shown(name)
+    local m = Data.members
+    if not m or m.guild ~= ns.GuildName() then return true end
+    if m.full[name] or ns.SameChar(name, ns.MyName()) then return true end
+    local first = ns.FirstName(name)
+    if not first then return false end
+    if m.loose[first] then return true end
+    return not name:find(" ", 1, true) and m.first[first] == true
+end
 
 -- Before v0.5 deaths were kept under the first name only. Moves this character's from
 -- "Mira" to "Mira Stone" (only our own: for others we cannot tell which surname).
@@ -180,8 +221,10 @@ end
 local function Each(book, period, scope, now, fn)
     local from = Data.PeriodStart(period, now)
     for name, p in pairs(book.players) do
-        for _, r in pairs(p.deaths) do
-            if r.t >= from and Data.InScope(r, scope) then fn(name, p, r) end
+        if Data.Shown(name) then
+            for _, r in pairs(p.deaths) do
+                if r.t >= from and Data.InScope(r, scope) then fn(name, p, r) end
+            end
         end
     end
 end
@@ -210,9 +253,10 @@ function Data.Leaderboard(book, period, scope, now)
     if UsesStats(period, scope) then
         for name, p in pairs(book.players) do
             local tracked = by[name] and by[name].count or 0
-            if p.stat and p.stat.total > tracked then
+            local fromStat = Data.Shown(name) and Data.StatCount(p.stat, period, scope)
+            if fromStat and fromStat > tracked then
                 local row = by[name] or { name = name, class = p.class, causes = {} }
-                row.tracked, row.count, row.fromStats = tracked, p.stat.total, true
+                row.tracked, row.count, row.fromStats = tracked, fromStat, true
                 by[name] = row
             end
         end

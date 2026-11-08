@@ -1,10 +1,11 @@
 -- Omen Deaths: how the addon is doing for each guildie (08-11-2026, wish of the player:
 -- "if someone reports a bug, can I see it?").
 -- Every addon tells its own health in one hidden guild message, at login and after each death:
---   H|owner|version|logged|missed|step|errors|lastError
+--   H|owner|version|logged|missed|step|errors|lastError|post
 -- logged = deaths in the measurement log (the last Death.LOG_KEEP), missed = of those without
 -- killer and cause, step = where the latest missed one stopped, errors = errors caught in the
--- addon's own event handlers since this version, lastError = the text of the latest one.
+-- addon's own event handlers since this version, lastError = the text of the latest one,
+-- post = how the guild chat line of the latest death went (Toast.Note; from v0.8.4).
 -- Each player keeps what they heard per guild, in book.health[name].
 local _, ns = ...
 local Health = {}
@@ -23,7 +24,8 @@ function Health.Mine()
         end
     end
     local err = db.errors or {}
-    return { v = ns.VERSION, n = #log, miss = missed, step = step, err = err.n or 0, text = err.text }
+    local post = db.lastPost and db.lastPost.r
+    return { v = ns.VERSION, n = #log, miss = missed, step = step, err = err.n or 0, text = err.text, post = post }
 end
 
 -- A report heard (or my own): kept with the time it came in.
@@ -46,7 +48,9 @@ function Health.List(book)
     local list = {}
     for name, h in pairs(book.health or {}) do
         local p = book.players and book.players[name]
-        list[#list + 1] = { name = name, class = p and p.class, count = Health.Problems(h), h = h }
+        if ns.Data.Shown(name) then
+            list[#list + 1] = { name = name, class = p and p.class, count = Health.Problems(h), h = h }
+        end
     end
     table.sort(list, function(a, b)
         if a.count ~= b.count then return a.count > b.count end
@@ -54,6 +58,14 @@ function Health.List(book)
     end)
     return list
 end
+
+-- The guild chat result in words, for the tooltip.
+Health.POST_TEXT = {
+    sent = "sent", off = "not sent: Guild chat is Off", bg = "not sent: battleground (No BG)",
+    boss = "not sent: counted as a boss fight", wait = "waiting: the game holds chat back",
+    queued = "about to be sent", err = "failed: the game refused it (see latest error)",
+    noguild = "not sent: not in a guild",
+}
 
 -- One line about a report: "v0.8.0 · 1 of 20 deaths without a cause (stopped at latest) · 0 errors".
 function Health.Line(h)

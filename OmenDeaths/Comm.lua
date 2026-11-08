@@ -3,7 +3,8 @@
 -- Messages (prefix "OmenDeaths", channel GUILD, at most 250 bytes):
 --   L|owner|t|class|level|type|instanceID|difficulty|zone|killer|cause   a fresh death (shows a toast)
 --   R|...same fields...                                                  a record sent again (sync, or killer found later)
---   S|owner|total|readAt|class                                           the game's "Total deaths" statistic of owner
+--   S|owner|total|readAt|class|bg                                        the game's "Total deaths" statistic of owner
+--                                                                        (bg = of those in battlegrounds, from v0.8.4)
 --   V|owner=count:latest:statAt,...                                     what I hold, sent at login (several if long)
 --   N|owner|count|latest                                                 "I hold this much of owner, send me what I lack"
 --   P|version                                                            "I run Omen Deaths", answer to V
@@ -64,18 +65,19 @@ end
 local function Text(s) if s ~= nil and s ~= "" then return s end end
 
 -- Health report. The error text gets what is left of MAX_LEN after the other fields:
--- "H" 1 + name 25 + version 10 + logged 2 + missed 2 + step 8 + errors 6 + 7 separators = 61.
-Comm.HEALTH_TEXT_LEN = Comm.MAX_LEN - 61
+-- "H" 1 + name 25 + version 10 + logged 2 + missed 2 + step 8 + errors 6 + post 7 + 8 separators = 69.
+-- post comes last: older versions read 8 fields and leave it.
+Comm.HEALTH_TEXT_LEN = Comm.MAX_LEN - 69
 function Comm.EncodeHealth(owner, h)
     return table.concat({ "H", Clean(owner, Comm.NAME_LEN), Clean(h.v, 10), tostring(h.n or 0), tostring(h.miss or 0),
-        Clean(h.step, 8), tostring(h.err or 0), Clean(h.text, Comm.HEALTH_TEXT_LEN) }, "|")
+        Clean(h.step, 8), tostring(h.err or 0), Clean(h.text, Comm.HEALTH_TEXT_LEN), Clean(h.post, 7) }, "|")
 end
 
 function Comm.DecodeHealth(msg)
     local p = Split(msg)
     if p[1] ~= "H" or #p < 8 or not Text(p[2]) then return nil end
     return p[2], { v = Text(p[3]), n = tonumber(p[4]) or 0, miss = tonumber(p[5]) or 0, step = Text(p[6]),
-        err = tonumber(p[7]) or 0, text = Text(p[8]) }
+        err = tonumber(p[7]) or 0, text = Text(p[8]), post = Text(p[9]) }
 end
 
 function Comm.DecodeRecord(msg)
@@ -175,7 +177,7 @@ local function Build(item)
         if not p or not p.stat then return nil end
         local h = heard["S/" .. owner .. "/" .. p.stat.at]
         if item.relay and h and h >= item.queued then return nil end
-        return table.concat({ "S", owner, p.stat.total, p.stat.at, p.class or "" }, "|")
+        return table.concat({ "S", owner, p.stat.total, p.stat.at, p.class or "", p.stat.bg or "" }, "|")
     end
     if item.need then
         -- still lacking? The answer may have arrived from someone else meanwhile.
@@ -283,7 +285,7 @@ local function OnVector(sender, v)
                 notBefore = GetTime() + math.random() * Comm.RELAY_JITTER })
         end
     end
-    Push({ msg = "P|" .. ns.VERSION })
+    Push({ msg = "P|" .. ns.Announced() })
 end
 
 -- "0.10.0" > "0.9.0": compares number by number.
@@ -342,7 +344,7 @@ function Comm.OnMessage(prefix, msg, channel, sender)
         if owner and total and at then
             heard["S/" .. owner .. "/" .. at] = GetTime()
             Seen(sender)
-            if ns.Data.SetStat(ns.Book(), owner, total, at, p[5]) then ns.Changed() end
+            if ns.Data.SetStat(ns.Book(), owner, total, at, p[5], tonumber(p[6])) then ns.Changed() end
         end
     elseif kind == "V" then
         local v = Comm.DecodeVector(msg)
@@ -378,7 +380,11 @@ function Comm.SendHealth()
     if not me or not ns.db or not ns.Health then return end
     local h = ns.Health.Mine()
     ns.Health.Store(me, h)
-    if ns.GuildName() then Push({ msg = Comm.EncodeHealth(me, h) }) end
+    if not ns.GuildName() then return end
+    local told = {}
+    for k, v in pairs(h) do told[k] = v end
+    told.v = ns.Announced()
+    Push({ msg = Comm.EncodeHealth(me, told) })
 end
 
 -- Guildies online with the addon: those heard from this session and online in the roster now.
@@ -431,7 +437,23 @@ ns.On("PLAYER_GUILD_UPDATE", function()
     if synced and synced ~= ns.GuildName() then synced = nil end
     TrySync()
 end)
+-- Who is in the guild now, for the leaderboards (Data.Shown). An empty answer (not loaded yet)
+-- changes nothing.
+function Comm.ReadRoster()
+    local guild = ns.GuildName()
+    if not guild then return end
+    local n = ns.Call(GetNumGuildMembers) or 0
+    if type(n) ~= "number" or n <= 0 then return end
+    local names = {}
+    for i = 1, n do
+        local name = ns.ShortName((ns.Call(GetGuildRosterInfo, i)))
+        if name then names[#names + 1] = name end
+    end
+    if #names > 0 then ns.Data.SetMembers(guild, names) end
+end
+
 ns.On("GUILD_ROSTER_UPDATE", function()
+    Comm.ReadRoster()
     TrySync()
     ns.Changed()
 end)

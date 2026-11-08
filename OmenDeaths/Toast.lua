@@ -31,14 +31,36 @@ local function Locked()
     return api and ns.Call(api.InChatMessagingLockdown) == true
 end
 
+-- How the guild chat line of my latest death went, for the Health report (08-11-2026: a guildie's
+-- death got no line and nothing showed why). One word: sent, off, bg (No BG), boss (counted as a
+-- boss fight), wait (the game holds chat back), queued, err (the game refused it), noguild.
+function Toast.Note(result, err)
+    if not ns.db then return end
+    ns.db.lastPost = { r = result, at = ns.Now() }
+    if err then ns.NoteError(err, "guild chat") end
+end
+
 poster:SetScript("OnUpdate", function(self)
     if Locked() then return end
     local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
+    local mine = false
     while outbox[1] do
-        local msg = table.remove(outbox, 1)
-        if send and ns.GuildName() then pcall(send, msg, "GUILD") end
+        local item = table.remove(outbox, 1)
+        local ok, err = false, "no way to send chat"
+        if not ns.GuildName() then
+            err = nil
+            if item.mine then Toast.Note("noguild") end
+        elseif send then
+            ok, err = pcall(send, item.msg, "GUILD")
+        end
+        if item.mine and ns.GuildName() then
+            Toast.Note(ok and "sent" or "err", not ok and err or nil)
+            mine = true
+        end
     end
     self:Hide()
+    -- the guild sees at once how it went
+    if mine and ns.Comm and ns.Comm.SendHealth then ns.Comm.SendHealth() end
 end)
 
 -- "[Omen Deaths] Hogger says hi to Benny - by Rend in Elwynn Forest. Deaths this week: 3"
@@ -61,20 +83,24 @@ function Toast.Fit(line)
     return line
 end
 
--- Posts a line in guild chat as soon as chat is allowed.
-function Toast.Post(line)
-    outbox[#outbox + 1] = Toast.Fit(line)
+-- Posts a line in guild chat as soon as chat is allowed. mine = the line of my own death.
+function Toast.Post(line, mine)
+    outbox[#outbox + 1] = { msg = Toast.Fit(line), mine = mine }
+    if mine then Toast.Note(Locked() and "wait" or "queued") end
     poster:Show()
 end
 
 function Toast.GuildPost(owner, t)
-    if not ns.db or not ns.db.settings.guildChat or owner ~= ns.MyName() or not ns.GuildName() then return end
+    if not ns.db or owner ~= ns.MyName() then return end
+    if not ns.db.settings.guildChat then return Toast.Note("off") end
+    if not ns.GuildName() then return Toast.Note("noguild") end
     local p = ns.Book().players[owner]
     local rec = p and p.deaths[t]
     if not rec then return end
+    if (rec.it == "pvp" or rec.it == "arena") and not ns.db.settings.guildChatBG then return Toast.Note("bg") end
     -- died in a boss fight: the summary after the fight covers it (Wipe.lua)
-    if ns.Wipe and ns.Wipe.Covers(rec.t) then return end
-    Toast.Post(Toast.GuildLine(owner, rec))
+    if ns.Wipe and ns.Wipe.Covers(rec) then return Toast.Note("boss") end
+    Toast.Post(Toast.GuildLine(owner, rec), true)
 end
 
 -- The game's own popups (StaticPopup1-4, "Release Spirit" among them) stand at the top of the

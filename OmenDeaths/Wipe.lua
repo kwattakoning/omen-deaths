@@ -17,10 +17,13 @@ local fights = {}        -- recent fights: { key, name, iid, z, start, stop, suc
 local current
 local claims = {}        -- key -> GetTime() a summary for that boss was claimed
 
--- Was server time t inside a boss fight (one that is going on, or one of the recent ones)?
-function Wipe.Covers(t)
+-- Was this death inside a boss fight (one that is going on, or one of the recent ones)?
+-- Only at the place of the fight: a fight whose end never came (08-11-2026, a guildie's open-world
+-- death got no guild chat line; most likely cause) cannot swallow deaths elsewhere.
+function Wipe.Covers(rec)
     for _, f in ipairs(fights) do
-        if t >= f.start and (not f.stop or t <= f.stop + 1) then return true end
+        local here = f.iid and rec.id == f.iid or (not f.iid and rec.z == f.z)
+        if here and rec.t >= f.start and (not f.stop or rec.t <= f.stop + 1) then return true end
     end
     return false
 end

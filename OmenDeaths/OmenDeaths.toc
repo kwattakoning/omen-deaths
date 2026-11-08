@@ -2,7 +2,7 @@
 ## Title: Omen Deaths
 ## Notes: Guild death leaderboard for <Omen>. Counts your own deaths and shares them with guildies who run the addon.
 ## Author: Omen
-## Version: 0.8.2
+## Version: 0.8.4
 ## IconTexture: Interface\Icons\INV_Misc_Bone_HumanSkull_01
 ## SavedVariables: OmenDeathsDB
 

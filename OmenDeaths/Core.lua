@@ -2,7 +2,11 @@
 local ADDON, ns = ...
 _G.OmenDeaths = ns
 
-ns.VERSION = "0.8.2"
+ns.VERSION = "0.8.4"
+-- The version told to the guild. A test copy (tools/deploy.ps1) sets ns.ANNOUNCE to the version on
+-- GitHub at the end of this file, so guildies are not told to update to a version they cannot
+-- download yet (08-11-2026). Unset = ns.VERSION.
+function ns.Announced() return ns.ANNOUNCE or ns.VERSION end
 ns.NO_GUILD = "(no guild)"
 -- Where the newest version is: the page with the download button (short, as it has to be typed over:
 -- links in WoW chat cannot be clicked).
@@ -97,17 +101,20 @@ function ns.On(event, fn)
     table.insert(handlers[event], fn)
 end
 
+-- An error, kept for the Health report; counted again from 0 with each new version.
+function ns.NoteError(err, where)
+    if not ns.db then return end
+    local e = ns.db.errors
+    if type(e) ~= "table" or e.v ~= ns.VERSION then e = { n = 0, v = ns.VERSION } end
+    e.n, e.text, e.at, e.event = e.n + 1, tostring(err):sub(1, 300), ns.Now and ns.Now() or nil, where
+    ns.db.errors = e
+end
+
 frame:SetScript("OnEvent", function(_, event, ...)
     for _, fn in ipairs(handlers[event] or {}) do
         local ok, err = pcall(fn, ...)
         if not ok then
-            -- kept for the Health report; counted again from 0 with each new version
-            if ns.db then
-                local e = ns.db.errors
-                if type(e) ~= "table" or e.v ~= ns.VERSION then e = { n = 0, v = ns.VERSION } end
-                e.n, e.text, e.at, e.event = e.n + 1, tostring(err):sub(1, 300), ns.Now and ns.Now() or nil, event
-                ns.db.errors = e
-            end
+            ns.NoteError(err, event)
             if geterrorhandler then geterrorhandler()(err) end
         end
     end
@@ -117,7 +124,9 @@ end)
 -- Saved data. One "book" of deaths per guild, so an alt in another guild
 -- keeps its own leaderboard.
 ---------------------------------------------------------------------------
-local DEFAULT_SETTINGS = { toast = true, chat = true, guildChat = true, minimapAngle = 200 }
+-- guildChatBG: also post deaths in battlegrounds and arenas (off by default, wish of a guildie
+-- 08-11-2026: a battleground gives many deaths and fills guild chat)
+local DEFAULT_SETTINGS = { toast = true, chat = true, guildChat = true, guildChatBG = false, minimapAngle = 200 }
 
 ns.On("ADDON_LOADED", function(name)
     if name ~= ADDON then return end

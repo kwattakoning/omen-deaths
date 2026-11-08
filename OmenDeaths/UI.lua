@@ -283,10 +283,17 @@ local function Build()
     foot2:SetJustifyH("LEFT")
     frame.foot2 = foot2
 
-    local guild = Button(frame, "", 116)
+    -- three steps: On -> No BG -> Off -> On
+    local guild = Button(frame, "", 128)
     guild:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -22, 18)
     guild:SetScript("OnClick", function()
-        state.guildChat = not state.guildChat
+        if not state.guildChat then
+            state.guildChat, state.guildChatBG = true, true
+        elseif state.guildChatBG then
+            state.guildChatBG = false
+        else
+            state.guildChat = false
+        end
         UI.Refresh()
     end)
     guild:SetScript("OnEnter", function(self)
@@ -294,6 +301,7 @@ local function Build()
         GameTooltip:SetText("Guild chat")
         GameTooltip:AddLine("When you die, post a funny line in guild chat.", 1, 1, 1)
         GameTooltip:AddLine("Everyone in the guild sees it, also without the addon.", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("No BG: not for deaths in battlegrounds and arenas.", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
     guild:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -387,6 +395,11 @@ local function HealthTooltip(row)
     if h.step then GameTooltip:AddLine("Latest one without a cause stopped at: " .. h.step, 0.85, 0.85, 0.85) end
     GameTooltip:AddLine("Errors in the addon: " .. (h.err or 0), 0.85, 0.85, 0.85)
     if h.text then GameTooltip:AddLine("Latest error: " .. h.text, 1, 0.5, 0.5, true) end
+    if h.post then
+        local bad = h.post == "err" or h.post == "boss"
+        GameTooltip:AddLine("Guild chat, latest death: " .. (ns.Health.POST_TEXT[h.post] or h.post),
+            bad and 1 or 0.85, bad and 0.6 or 0.85, bad and 0.2 or 0.85, true)
+    end
 end
 
 function UI.Tooltip(row)
@@ -499,7 +512,7 @@ function UI.Refresh()
     local online = ns.Comm.OnlinePeers()
     frame.foot2:SetText(("You: %d  ·  %d %s online with Omen Deaths"):format(mine, online, online == 1 and "guildie" or "guildies"))
 
-    frame.guildButton:SetText("Guild chat: " .. (state.guildChat and "On" or "Off"))
+    frame.guildButton:SetText("Guild chat: " .. (not state.guildChat and "Off" or state.guildChatBG and "On" or "No BG"))
     frame.chatButton:SetText("My chat: " .. (state.chat and "On" or "Off"))
     frame.bannerButton:SetText("Popup: " .. (state.toast and "On" or "Off"))
     -- an old version: the line under the title says so, in orange, until the addon is updated
