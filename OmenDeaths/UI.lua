@@ -175,6 +175,10 @@ local function Build()
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
+    -- own click: the template's default close goes through Blizzard's panel manager,
+    -- which on WoW Forever left this window open (only Escape worked, 08-11-2026)
+    close:SetScript("OnClick", function() frame:Hide() end)
+    frame.closeButton = close
 
     -- header
     local crest = frame:CreateTexture(nil, "ARTWORK")

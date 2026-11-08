@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 _G.OmenDeaths = ns
 
-ns.VERSION = "0.8.1"
+ns.VERSION = "0.8.2"
 ns.NO_GUILD = "(no guild)"
 -- Where the newest version is: the page with the download button (short, as it has to be typed over:
 -- links in WoW chat cannot be clicked).
