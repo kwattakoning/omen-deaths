@@ -1,0 +1,197 @@
+=====================================================================
+  OMEN DEATHS  -  the <Omen> Hall of the Fallen
+  A death leaderboard for our guild in World of Warcraft: Forever
+=====================================================================
+
+Who dies the most? Who keeps losing to Hogger? Who tested gravity
+one time too many? Omen Deaths keeps score, shares it with the guild,
+and makes fun of every death in guild chat.
+
+
+---------------------------------------------------------------------
+ 1. INSTALLING
+---------------------------------------------------------------------
+
+ 1. Close World of Warcraft completely.
+
+ 2. Unzip the download. You get a folder called "OmenDeaths".
+    (The folder name must stay exactly "OmenDeaths".)
+
+ 3. Put that folder in your WoW Forever AddOns folder:
+
+      C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+
+    The result must look like this:
+
+      ...\_forever_\Interface\AddOns\OmenDeaths\OmenDeaths.toc
+
+    Tip: if you see ...\AddOns\OmenDeaths\OmenDeaths\..., you have one
+    folder too many. Move the inner folder up one level.
+
+    Can't find the folder? Open the Battle.net app, pick WoW Forever,
+    click the gear icon next to "Play" and choose "Show in Explorer".
+    Then go to Interface\AddOns. (If there is no "Interface" or
+    "AddOns" folder yet, just create it.)
+
+ 4. Start WoW. On the character select screen click "AddOns" (bottom
+    left) and check that "Omen Deaths" is ticked. If it says "out of
+    date", tick "Load out of date AddOns" at the top.
+
+ 5. Log in. You'll see a little skull button on the edge of your
+    minimap. That's it!
+
+ Updating: the newest version is always at
+   https://github.com/kwattakoning/omen-deaths/releases/latest/download/OmenDeaths.zip
+ Close WoW, delete the old OmenDeaths folder, put the new
+ one in its place. Your saved deaths are not in this folder, so you
+ keep them.
+
+ Uninstalling: close WoW and delete the OmenDeaths folder.
+
+
+---------------------------------------------------------------------
+ 2. HOW IT WORKS
+---------------------------------------------------------------------
+
+ * Every member who runs the addon counts their OWN deaths and shares
+   them over the hidden guild addon channel. Nothing is typed in chat
+   for this; other guildies' addons pick it up automatically.
+
+ * Only guildies who have the addon installed show up on the
+   leaderboard. (The game does not let addons see other players' deaths
+   any other way.) So: get everyone to install it!
+
+ * Logged in later? The addon catches up by itself: it fetches the
+   deaths that happened while you were offline from guildies who are
+   online.
+
+ * Deaths from BEFORE you installed the addon: the "All Time" board uses
+   the game's own statistic (Achievements > Statistics > Deaths >
+   Total deaths), which counts from your character's first day. So
+   your full lifetime count shows up there right away.
+
+ * Your pet dying does not count. Feign Death does not count.
+   Only a real death of your own character counts.
+
+
+---------------------------------------------------------------------
+ 3. THE WINDOW
+---------------------------------------------------------------------
+
+ Open it by clicking the skull on the minimap (or type /omen).
+ Close it with the X, with Escape, or by clicking the skull again.
+ Drag the window by its edge to move it. Drag the minimap skull to
+ move it around the minimap.
+
+ Hover over the minimap skull to see this week's #1 and your own count.
+
+ TABS (top row)
+   Today        deaths since the last daily reset
+   This Week    deaths since the last weekly reset (= your raid week)
+   This Month   deaths this calendar month
+   All Time     everything, including the game's lifetime statistic
+
+ VIEWS
+   The Fallen   players, most deaths first. Gold, silver and bronze for
+                the top 3, and everyone gets a (not so) honorary title,
+                like "Spirit Healer's Favourite" or "Floor Inspector".
+   Killers      what killed us the most: mobs, bosses, falling, lava...
+                "Unknown causes" = the game didn't tell us the killer.
+                "Before Omen Deaths" = deaths from the game's statistic,
+                from before the addon was installed (no killer known).
+   Health       how the addon is doing for every guildie who runs it:
+                their version ("old" = time to update), deaths the game
+                gave no cause for, and errors in the addon. Hover a row
+                for the latest error. Handy when someone reports a bug.
+
+ PLACE  ( <  Everywhere  > )
+   Use the arrows to switch between:
+     Everywhere      all deaths except battlegrounds and arenas
+     Open World      outside dungeons and raids
+     Dungeons        5-player dungeons
+     All Raids       every raid
+     Battlegrounds   battlegrounds and arenas
+     <raid name>     every raid someone has died in gets its own board,
+                     e.g. "Molten Core"
+
+ HOVER over a player to see their nemesis (what killed them most), and
+ when, where, by what and at which level they last died.
+ HOVER over a killer to see all its victims.
+
+ The bottom lines show the total for the current view, the deadliest
+ foe, your own count, and how many guildies are online with the addon.
+
+
+---------------------------------------------------------------------
+ 4. THE BUTTONS AT THE BOTTOM
+---------------------------------------------------------------------
+
+ Popup: On/Off
+   A banner at the top of your screen when a guildie (or you) dies,
+   with a funny line, the killer, the place and the death count of the
+   week. Click the banner to open the leaderboard. Only you see it.
+
+ My chat: On/Off
+   The same message as one line in your own chat window, so you can
+   read it back later. Only you see it.
+   (With "Guild chat" on as well, you may see a death twice. Switch
+   this one off if that bothers you.)
+
+ Guild chat: On/Off   (on by default)
+   When YOU die, the addon posts one funny line in guild chat, so the
+   whole guild can laugh, also those without the addon. For example:
+
+     [Omen Deaths] Hogger added Benny to their trophy wall - by Rend in
+     Elwynn Forest. Deaths this week: 3
+
+   The line fits how you died: falling, drowning, lava, a dungeon, a
+   raid boss, a battleground, a mob in the open world...
+   Only the person who died posts it, so there are no double lines.
+
+
+---------------------------------------------------------------------
+ 5. BOSS FIGHTS
+---------------------------------------------------------------------
+
+ No chat spam during a wipe: deaths during a boss fight don't get a
+ line each. Instead, a few seconds after the fight ONE guildie posts a
+ summary (the addons agree among themselves who does it):
+
+   [Omen Deaths] Wipe at Lucifron! 12 brave souls fell: Benny, ...
+   [Omen Deaths] Magmadar is down! It only cost 1 life: Benny
+
+ A clean kill without deaths gets no message. During boss fights the
+ game holds back addon messages; everything is sent right after the
+ fight, nothing gets lost.
+
+
+---------------------------------------------------------------------
+ 6. QUESTIONS
+---------------------------------------------------------------------
+
+ I don't see the skull on my minimap.
+   Check that the folder is in the right place (step 3) and that the
+   addon is ticked in the AddOns list (step 4). A brand-new addon needs
+   a full restart of the game; /reload is not enough the first time.
+
+ A guildie is missing from the board.
+   They need the addon too. Once they install it, their deaths are
+   counted from then on, and their "All Time" shows their full count.
+
+ My numbers differ between "All Time" and "This Month".
+   That's normal: All Time includes the game's lifetime statistic,
+   the other tabs only count deaths seen since the addon was installed.
+
+ Can I turn the guild chat messages off?
+   Yes: click "Guild chat: On" in the window to make it "Off".
+
+ Does this addon do anything in combat?
+   No. It only notices that you died and shares that. It never casts,
+   targets or decides anything for you.
+
+ Can't open the window by clicking?
+   Type /omen in chat (or /omendeaths).
+
+
+ Have fun, and remember: death is temporary, shame is forever.
+                                                          - <Omen>
