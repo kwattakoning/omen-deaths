@@ -298,15 +298,22 @@ function Comm.Newer(a, b)
     return false
 end
 
-local warnedVersion
+-- Comm.newest = the newest version heard from a guildie when it is newer than mine, else nil.
+-- The chat line comes once per version heard; the window shows it as long as it holds.
+function Comm.UpdateText()
+    if not Comm.newest then return nil end
+    return "Omen Deaths " .. Comm.newest .. " is out (you have " .. ns.VERSION .. "). Download: " .. ns.DOWNLOAD
+end
+
 local function Seen(sender, version)
     local p = Comm.peers[sender] or {}
     p.seen = GetTime()
     if version then p.version = version end
     Comm.peers[sender] = p
-    if version and not warnedVersion and Comm.Newer(version, ns.VERSION) then
-        warnedVersion = true
-        ns.Print("a guildie runs a newer version (" .. version .. "). Time to update!")
+    if version and Comm.Newer(version, Comm.newest or ns.VERSION) then
+        Comm.newest = version
+        ns.Print("|cffff9900" .. Comm.UpdateText() .. "|r")
+        ns.Changed()
     end
 end
 

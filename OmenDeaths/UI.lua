@@ -498,6 +498,17 @@ function UI.Refresh()
     frame.guildButton:SetText("Guild chat: " .. (state.guildChat and "On" or "Off"))
     frame.chatButton:SetText("My chat: " .. (state.chat and "On" or "Off"))
     frame.bannerButton:SetText("Popup: " .. (state.toast and "On" or "Off"))
+    -- an old version: the line under the title says so, in orange, until the addon is updated
+    -- short, to fit the one line under the title
+    local update = ns.Comm.newest and ("Update to " .. ns.Comm.newest .. " (you have " .. ns.VERSION .. "): " .. ns.DOWNLOAD)
+    if update then
+        frame.quip:SetText(update)
+        frame.quip:SetTextColor(1, 0.6, 0)
+    elseif frame.quip.update then
+        frame.quip:SetText(QUIPS[math.random(#QUIPS)])
+        frame.quip:SetTextColor(0.5, 0.5, 0.5)
+    end
+    frame.quip.update = update
 end
 
 function UI.Show()

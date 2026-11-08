@@ -40,7 +40,9 @@ and makes fun of every death in guild chat.
  5. Log in. You'll see a little skull button on the edge of your
     minimap. That's it!
 
- Updating: the newest version is always at
+ Updating: when a guildie runs a newer version, the addon tells you in
+ chat and in orange under the title of its window. The newest version is
+ always at
    https://github.com/kwattakoning/omen-deaths/releases/latest/download/OmenDeaths.zip
  Close WoW, delete the old OmenDeaths folder, put the new
  one in its place. Your saved deaths are not in this folder, so you

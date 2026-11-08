@@ -2,8 +2,11 @@
 local ADDON, ns = ...
 _G.OmenDeaths = ns
 
-ns.VERSION = "0.8.0"
+ns.VERSION = "0.8.1"
 ns.NO_GUILD = "(no guild)"
+-- Where the newest version is: the page with the download button (short, as it has to be typed over:
+-- links in WoW chat cannot be clicked).
+ns.DOWNLOAD = "github.com/kwattakoning/omen-deaths"
 
 ---------------------------------------------------------------------------
 -- Secret values: in this client some answers can be "secret" during combat.
