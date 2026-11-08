@@ -305,7 +305,10 @@ end
 -- The chat line comes once per version heard; the window shows it as long as it holds.
 function Comm.UpdateText()
     if not Comm.newest then return nil end
+    -- the addon cannot see files on disk: a version downloaded but not loaded yet still says the old
+    -- number, hence the hint (08-11-2026)
     return "Omen Deaths " .. Comm.newest .. " is out (you have " .. ns.VERSION .. "). Download: " .. ns.DOWNLOAD
+        .. " - already downloaded? Type /reload"
 end
 
 local function Seen(sender, version)
