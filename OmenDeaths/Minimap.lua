@@ -17,6 +17,8 @@ function Mini.Place(button, angle)
     button:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
 end
 
+Mini.ICON = "Interface\\AddOns\\OmenDeaths\\OmenLogo"
+
 local function Build()
     if not Minimap then return end
     local b = CreateFrame("Button", "OmenDeathsMinimapButton", Minimap)
@@ -33,9 +35,11 @@ local function Build()
     bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
 
     local icon = b:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(18, 18)
+    -- the guild logo (09-11-2026): the tree from Omen.png, cut round, 64x64 TGA; as big as the
+    -- round background under it (20)
+    icon:SetSize(20, 20)
     icon:SetPoint("CENTER", b, "CENTER", 0, 0)
-    icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
+    icon:SetTexture(Mini.ICON)
 
     local border = b:CreateTexture(nil, "OVERLAY")
     border:SetSize(54, 54)
