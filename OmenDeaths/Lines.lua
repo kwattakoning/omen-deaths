@@ -37,9 +37,20 @@ Lines.SETS = {
             "{name} pulled {killer} a little too early" },
         plain = { "{name} pulled one mob too many", "{name} found out why the tank goes first" },
     },
+    -- "lost a fair fight" was read literally by a guildie who died to a skull mob (08-11-2026)
     world = {
-        killer = { "{name} lost a fair fight to {killer}", "{killer} added {name} to their trophy wall",
+        killer = { "{name} picked the wrong fight with {killer}", "{killer} added {name} to their trophy wall",
             "{name} underestimated {killer}", "{name} was humbled by {killer}" },
+    },
+    -- open world, killer far above my level: red or skull, as the game colours its level
+    above = {
+        killer = { "{name} picked a fight way above their pay grade: {killer}",
+            "{name} saw {killer}'s level and went for it anyway", "{killer} was a few levels out of {name}'s league" },
+    },
+    -- open world, killer gray: gives no experience, still got me
+    gray = {
+        killer = { "{name} lost to {killer}. Yes, the gray one.", "{killer} gives no XP, but it did get {name}",
+            "{name} was taken out by {killer}, a gray mob" },
     },
     generic = {
         plain = { "{name} bit the dust", "{name} is taking a dirt nap", "{name} joined the Spirit Healer fan club",
@@ -58,7 +69,12 @@ function Lines.Situation(rec)
     if it == "pvp" or it == "arena" then return "pvp" end
     if it == "raid" then return "raid" end
     if it == "party" then return "dungeon" end
-    if rec.k then return "world" end
+    if rec.k then
+        -- kt = how the game coloured the killer's level at the death (only known to who died)
+        if rec.kt == "skull" or rec.kt == "red" then return "above" end
+        if rec.kt == "gray" then return "gray" end
+        return "world"
+    end
     return "generic"
 end
 

@@ -3,13 +3,14 @@
 -- book.players[name] = { class = "PRIEST", deaths = { [t] = record } }
 -- record = { t = server time, c = class, l = level, it = instance type ("none", "party", "raid",
 --            "pvp", "arena", ...), id = instance ID, d = difficulty ID, z = zone or instance name,
---            k = killer name, s = spell or cause }
+--            k = killer name, s = spell or cause, b = raid boss of the fight it happened in (v0.8.7),
+--            kt = colour of the killer's level: "skull", "red", "gray" (own deaths only, not sent) }
 -- A death is known by its owner and its second (t): nobody dies twice in one second.
 local _, ns = ...
 local Data = {}
 ns.Data = Data
 
-local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s" }
+local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b" }
 
 -- Adds or completes a record. `authoritative` = the owner sent it, so it may overwrite.
 -- Returns "new", "updated" or nil (nothing changed).
@@ -192,10 +193,12 @@ function Data.InScope(rec, scope)
     if kind == "raid" then return it == "raid" end
     if kind == "pvp" then return it == "pvp" or it == "arena" end
     if kind == "instance" then return rec.id == scope.id end
+    if kind == "boss" then return rec.id == scope.id and rec.b == scope.b end
     return true
 end
 
--- The list the location button cycles through: fixed kinds, then every raid seen in the book.
+-- The list the location button cycles through: fixed kinds, then every raid seen in the book,
+-- each followed by its bosses that have deaths (v0.8.7: "Molten Core - Lucifron").
 function Data.Scopes(book)
     local list = {
         { kind = "all", label = "Everywhere" },
@@ -204,17 +207,30 @@ function Data.Scopes(book)
         { kind = "raid", label = "All Raids" },
         { kind = "pvp", label = "Battlegrounds" },
     }
-    local raids, seen = {}, {}
+    local raids, seen, bosses = {}, {}, {}
     for _, p in pairs(book.players) do
         for _, r in pairs(p.deaths) do
-            if r.it == "raid" and r.id and not seen[r.id] then
-                seen[r.id] = true
-                raids[#raids + 1] = { kind = "instance", id = r.id, label = r.z or ("Raid " .. r.id) }
+            if r.it == "raid" and r.id then
+                if not seen[r.id] then
+                    seen[r.id] = true
+                    bosses[r.id] = {}
+                    raids[#raids + 1] = { kind = "instance", id = r.id, label = r.z or ("Raid " .. r.id) }
+                end
+                if r.b then bosses[r.id][r.b] = true end
             end
         end
     end
     table.sort(raids, function(a, b) return a.label < b.label end)
-    for _, r in ipairs(raids) do list[#list + 1] = r end
+    for _, raid in ipairs(raids) do
+        list[#list + 1] = raid
+        local names = {}
+        for b in pairs(bosses[raid.id]) do names[#names + 1] = b end
+        table.sort(names)
+        for _, b in ipairs(names) do
+            -- short: what the place field shows (about 130 px wide; the full label is the key)
+            list[#list + 1] = { kind = "boss", id = raid.id, b = b, label = raid.label .. " - " .. b, short = b }
+        end
+    end
     return list
 end
 

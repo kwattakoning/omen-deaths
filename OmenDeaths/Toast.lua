@@ -33,9 +33,10 @@ end
 
 -- How the guild chat line of my latest death went, for the Health report (08-11-2026: a guildie's
 -- death got no line and nothing showed why). One word: off, bg (No BG), boss (counted as a boss
--- fight), wait (the game holds chat back), queued, err (the game refused it), noguild, sent (sent,
--- not seen back yet), arrived (seen back in guild chat), retried (seen back after the second try),
--- lost (not seen back, also not after the second try). echo = seconds until it was seen back.
+-- fight), wait (the game holds chat back), queued, click (waits for my next click), err (the game
+-- refused it), noguild, sent (not seen back yet), arrived (seen back in guild chat), lost (not back
+-- by the time I was alive again: next lines go at a click). Up to 0.8.6 also retried (a second try;
+-- gone since 0.8.7) and lost meant "also not after the second try". echo = seconds until seen back.
 function Toast.Note(result, err, echo)
     if not ns.db then return end
     ns.db.lastPost = { r = result, at = ns.Now(), echo = echo }
@@ -52,67 +53,106 @@ local function Send(msg)
     return pcall(send, msg, "GUILD")
 end
 
--- Echo check (08-11-2026): Chrysi's line went out without an error but never showed in guild chat,
--- while a line he typed did. Everyone sees their own guild lines come back (CHAT_MSG_GUILD). If
--- mine has not come back, it goes once more at the player's next click (Release Spirit, accepting a
--- res, a click in the world): sent from a click it goes out as a typed line does.
--- ECHO_WAIT: the echo of a line came back after 0.50 and 0.53 s (two measurements by the player, 08-11-2026);
--- a click sooner than this could send a line whose echo is still on its way, so twice.
-Toast.ECHO_WAIT = 1
-local waiting -- my line not seen back yet: { msg, at = GetTime() of the latest try, tries }
+-- My own line (09-11-2026): at once, or at my first click after the death on a client that needs it.
+-- - Chrysi's lines sent by the addon got lost without an error, while a typed line arrived; a line
+--   sent from a click arrived for him (Health "retried/1.21", 08-11-2026). For Kwatta, Benny and
+--   Booty the line sent at once arrived ("arrived/0.55").
+-- - The second try of 0.8.5 (once more if the echo was not back within 1 s) gave a double line:
+--   Kwatta's echo came back about 5 s late (death at :53.5, second try at :58.8, then an echo
+--   0.23 s later, faster than any fresh echo measured: 0.50-0.55 s). A late echo cannot be told
+--   apart from a lost line, so there is never a second try.
+-- So the client learns: a line sent at once that has not come back by the time I am alive again
+-- (or by my next line) puts this client on clicks (OmenDeathsDB.clickMode); if its echo still
+-- comes later, clicks go off again. The user chose this over "always at a click" (09-11-2026).
+-- Clicks: Release Spirit, accepting a res, any click in the world (turning the camera too).
+local waiting -- my line: { msg, at = GetTime() when sent (nil: waits for a click), auto = sent at once, missed }
+
+-- The shortest echo measured of a fresh line (0.50, 0.53, 0.55 s; 08-11-2026). A "retried" from
+-- 0.8.5/0.8.6 with a shorter echo was the late first line, not a lost one (Kwatta's 0.23).
+Toast.FRESH_ECHO = 0.50
+
+-- Upgrading from 0.8.5/0.8.6: a client that lost a line then starts on clicks, so it does not lose one again.
+function Toast.SeedClickMode()
+    local db = ns.db
+    if not db or db.clickMode ~= nil then return end
+    local lp = db.lastPost
+    db.clickMode = (lp and (lp.r == "lost" or (lp.r == "retried" and type(lp.echo) == "number"
+        and lp.echo >= Toast.FRESH_ECHO))) and true or false
+end
+ns.On("PLAYER_LOGIN", function() Toast.SeedClickMode() end)
+
+-- My line sent at once did not come back in time: from now on at a click.
+local function Missed()
+    if not waiting or not waiting.auto or waiting.missed then return end
+    waiting.missed = true
+    if ns.db then ns.db.clickMode = true end
+    Toast.Note("lost")
+    Report()
+end
 
 poster:SetScript("OnUpdate", function(self)
     if Locked() then return end
-    local mine = false
     while outbox[1] do
         local item = table.remove(outbox, 1)
         if not ns.GuildName() then
             if item.mine then Toast.Note("noguild") end
-        else
-            local ok, err = Send(item.msg)
-            if item.mine then
+        elseif item.mine then
+            -- the line before has not come back yet: it counts as lost
+            Missed()
+            if ns.db and ns.db.clickMode then
+                waiting = { msg = item.msg }
+                Toast.Note("click")
+            else
+                local ok, err = Send(item.msg)
+                waiting = ok and { msg = item.msg, at = GetTime(), auto = true } or nil
                 Toast.Note(ok and "sent" or "err", not ok and err or nil)
-                waiting = ok and { msg = item.msg, at = GetTime(), tries = 1 } or nil
-                mine = true
+                Report()
             end
+        else
+            Send(item.msg)
         end
     end
     self:Hide()
-    -- the guild sees at once how it went
-    if mine then Report() end
 end)
+
+ns.On("PLAYER_ALIVE", function() Missed() end)
+ns.On("PLAYER_UNGHOST", function() Missed() end)
 
 local function Trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 -- A line in guild chat: is it mine coming back?
 function Toast.Heard(text, sender)
-    if not waiting then return end
+    if not waiting or not waiting.at then return end
     local fromMe = ns.IsSecret(sender) or ns.SameChar(sender, ns.MyName())
     if not fromMe then return end
     if not ns.IsSecret(text) and (type(text) ~= "string" or Trim(text) ~= Trim(waiting.msg)) then return end
     local echo = math.floor((GetTime() - waiting.at) * 100 + 0.5) / 100
-    Toast.Note(waiting.tries > 1 and "retried" or "arrived", nil, echo)
+    -- only late, not lost: sending at once works on this client after all
+    if waiting.missed and ns.db then ns.db.clickMode = false end
+    Toast.Note("arrived", nil, echo)
     waiting = nil
     Report()
 end
 ns.On("CHAT_MSG_GUILD", function(text, sender) Toast.Heard(text, sender) end)
 
--- The player clicked: my line not seen back yet goes once more.
+-- The player clicked: my line that waits for a click goes out now, once.
 function Toast.Click()
-    if not waiting or GetTime() - waiting.at < Toast.ECHO_WAIT then return end
-    if waiting.tries >= 2 then
+    if not waiting or waiting.at or Locked() then return end
+    if not ns.GuildName() then
         waiting = nil
-        Toast.Note("lost")
-        Report()
+        Toast.Note("noguild")
         return
     end
     local ok, err = Send(waiting.msg)
-    waiting.tries, waiting.at = 2, GetTime()
-    if not ok then
+    if ok then
+        waiting.at = GetTime()
+        Toast.Note("sent")
+    else
         waiting = nil
         Toast.Note("err", err)
-        Report()
     end
+    -- the guild sees at once how it went
+    Report()
 end
 
 -- Clicks to listen to: the buttons of the game's popups (StaticPopup1-4, under several names as

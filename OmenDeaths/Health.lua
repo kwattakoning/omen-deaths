@@ -64,10 +64,10 @@ end
 Health.POST_TEXT = {
     sent = "sent", off = "not sent: Guild chat is Off", bg = "not sent: battleground (No BG)",
     boss = "not sent: counted as a boss fight", wait = "waiting: the game holds chat back",
-    queued = "about to be sent", err = "failed: the game refused it (see latest error)",
+    queued = "about to be sent", click = "waiting for a click (the line goes at the next click)", err = "failed: the game refused it (see latest error)",
     noguild = "not sent: not in a guild", sent = "sent, not seen in guild chat yet",
-    arrived = "arrived in guild chat", retried = "arrived after a second try (at a click)",
-    lost = "did not arrive, also not after a second try",
+    arrived = "arrived in guild chat", retried = "arrived after a second try (at a click)", -- retried: up to 0.8.6
+    lost = "did not arrive (from now on sent at a click)",
 }
 Health.POST_BAD = { err = true, boss = true, lost = true }
 

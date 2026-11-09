@@ -9,6 +9,7 @@
 --   N|owner|count|latest                                                 "I hold this much of owner, send me what I lack"
 --   P|version                                                            "I run Omen Deaths", answer to V
 --   W|boss                                                               "I post the summary of this boss fight"
+--   U|version                                                            "I post the new-version line" (v0.8.7)
 --   H|owner|version|logged|missed|step|errors|lastError                  how my addon is doing (Health.lua)
 --
 -- Whoever holds more of a player's deaths than the asker sends them. Everyone hears every
@@ -50,10 +51,16 @@ local function Clean(s, max)
     return s
 end
 
+-- The raid boss (v0.8.7) comes last, so older versions read their 11 fields and leave it. It gets
+-- what is left of MAX_LEN after the rest; a name that does not fit whole is left out (a cut-off
+-- name would make a boss of its own on the leaderboard).
 function Comm.EncodeRecord(kind, owner, r)
     local n = Comm.TEXT_LEN
-    return table.concat({ kind, Clean(owner, Comm.NAME_LEN), tostring(r.t), Clean(r.c, 11), tostring(r.l or ""),
+    local msg = table.concat({ kind, Clean(owner, Comm.NAME_LEN), tostring(r.t), Clean(r.c, 11), tostring(r.l or ""),
         Clean(r.it, 8), tostring(r.id or ""), tostring(r.d or ""), Clean(r.z, n), Clean(r.k, n), Clean(r.s, n) }, "|")
+    local boss = Clean(r.b, Comm.MAX_LEN)
+    if boss ~= "" and #msg + 1 + #boss <= Comm.MAX_LEN then msg = msg .. "|" .. boss end
+    return msg
 end
 
 local function Split(msg)
@@ -88,7 +95,7 @@ function Comm.DecodeRecord(msg)
     if not t or not Text(p[2]) then return nil end
     return p[1], p[2], {
         t = t, c = Text(p[4]), l = tonumber(p[5]), it = Text(p[6]), id = tonumber(p[7]), d = tonumber(p[8]),
-        z = Text(p[9]), k = Text(p[10]), s = Text(p[11]),
+        z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]),
     }
 end
 
@@ -287,6 +294,8 @@ local function OnVector(sender, v)
         end
     end
     Push({ msg = "P|" .. ns.Announced() })
+    local claim = Comm.UpdateClaim()
+    if claim then Push({ msg = claim }) end
 end
 
 -- "0.10.0" > "0.9.0": compares number by number.
@@ -366,6 +375,9 @@ function Comm.OnMessage(prefix, msg, channel, sender)
     elseif kind == "W" then
         local key = msg:match("^W|(.+)$")
         if key and ns.Wipe then ns.Wipe.HeardClaim(key) end
+    elseif kind == "U" then
+        local v = msg:match("^U|(.+)$")
+        if v then Comm.HeardUpdateClaim(v) end
     elseif kind == "P" then
         Seen(sender, msg:match("^P|(.+)$"))
     elseif kind == "H" then
@@ -389,6 +401,64 @@ function Comm.SendHealth()
     for k, v in pairs(h) do told[k] = v end
     told.v = ns.Announced()
     Push({ msg = Comm.EncodeHealth(me, told) })
+end
+
+---------------------------------------------------------------------------
+-- New version in guild chat (09-11-2026, wish of the user): the first guildie who loads a new
+-- released version posts one line, once per version per guild. Not from a test copy (it tells
+-- the guild the released version: ns.Announced() ~= ns.VERSION), not when Guild chat is Off.
+-- Known as posted (book.updateSeen): I posted it, or heard a claim U|version. Whoever knows sends
+-- the claim along with the answer to every V (a guildie logging in), so a late loader hears it.
+-- Also posted already: a saved Health report from an earlier session shows a guildie on this
+-- version or newer (they loaded it first). A guildie seen on it only this session is no proof:
+-- two loading it at the same time would then both stay quiet.
+---------------------------------------------------------------------------
+-- Wait after the sync: answers to my V (P and U) are sent at once; plus 0.55 s on the way (the
+-- slowest echo measured, 08-11-2026) and RELAY_JITTER for the paced queue. Then a random
+-- 0..RELAY_JITTER, so two loading at the same time do not both post (as Wipe does).
+Comm.UPDATE_WAIT = Comm.RELAY_JITTER + 0.55
+local sessionStart
+
+local function SeenVersion(book, version)
+    if not book.updateSeen or Comm.Newer(version, book.updateSeen) then book.updateSeen = version end
+end
+
+function Comm.HeardUpdateClaim(version)
+    if ns.db and ns.GuildName() then SeenVersion(ns.Book(), version) end
+end
+
+function Comm.UpdateLine()
+    return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version"
+        .. " so your guildies can mentally support you when you die: " .. ns.DOWNLOAD)
+end
+
+-- A saved Health report from before this session: another guildie on this version or newer.
+function Comm.HadItBefore(version)
+    local me = ns.MyName()
+    for name, h in pairs(ns.Book().health or {}) do
+        if type(h.v) == "string" and not ns.SameChar(name, me) and not Comm.Newer(version, h.v)
+            and type(h.at) == "number" and sessionStart and h.at < sessionStart then
+            return true
+        end
+    end
+    return false
+end
+
+function Comm.MaybeAnnounce()
+    if not ns.db or ns.Announced() ~= ns.VERSION or not ns.GuildName() then return end
+    if not ns.db.settings.guildChat then return end
+    local book = ns.Book()
+    if book.updateSeen and not Comm.Newer(ns.VERSION, book.updateSeen) then return end
+    SeenVersion(book, ns.VERSION)
+    if Comm.HadItBefore(ns.VERSION) then return end
+    Comm.SendRaw("U|" .. ns.VERSION)
+    ns.Toast.Post(Comm.UpdateLine())
+end
+
+-- With my answer to a V: the newest version I know was posted.
+function Comm.UpdateClaim()
+    local seen = ns.db and ns.GuildName() and ns.Book().updateSeen
+    if seen then return "U|" .. seen end
 end
 
 -- Guildies online with the addon: those heard from this session and online in the roster now.
@@ -421,8 +491,11 @@ local function TrySync()
     local guild = ns.GuildName()
     if not guild then return end
     synced = guild
+    sessionStart = sessionStart or ns.Now()
     Comm.SendVector()
     Comm.SendHealth()
+    local wait = Comm.UPDATE_WAIT + math.random() * Comm.RELAY_JITTER
+    if C_Timer and C_Timer.After then C_Timer.After(wait, Comm.MaybeAnnounce) end
     if C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
     ns.Changed()
 end

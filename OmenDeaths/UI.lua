@@ -432,7 +432,7 @@ function UI.Refresh()
     local book, now = ns.Book(), ns.Now()
     local scopes, index = UI.Scopes()
     local scope = scopes[index]
-    frame.place:SetText(scope.label)
+    frame.place:SetText(scope.short or scope.label)
     for _, b in ipairs(tabs) do Select(b, b.period == state.period) end
     for _, b in ipairs(viewButtons) do Select(b, b.view == state.view) end
 

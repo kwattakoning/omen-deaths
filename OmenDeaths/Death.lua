@@ -91,6 +91,58 @@ local function LatestRecap(tr, deathT)
     return events
 end
 
+-- How the game colours the killer's level (09-11-2026, a guildie read "lost a fair fight" literally
+-- after a skull mob). The death recap has no level (measured: sourceName, sourceGUID, flags, damage),
+-- so the killer is looked up among the units the client knows right now, by its GUID.
+-- The colour is the game's own, as on its unit frames; no level gap of our own:
+-- - skull: UnitLevel gives -1 (the game hides the level: "??")
+-- - C_PlayerInfo.GetContentDifficultyCreatureForPlayer(unit) -> Enum.RelativeContentDifficulty
+-- - else GetCreatureDifficultyColor(level) compared with QuestDifficultyColors.impossible / .trivial
+-- Not proven in this client yet: tr.level logs what each way gave.
+Death.NAMEPLATES = 40 -- the game's unit tokens nameplate1 to nameplate40
+function Death.FindUnit(guid)
+    if type(guid) ~= "string" or guid == "" then return end
+    local units = { "target", "focus", "mouseover", "softenemy" }
+    for i = 1, Death.NAMEPLATES do units[#units + 1] = "nameplate" .. i end
+    for _, unit in ipairs(units) do
+        if ns.Call(UnitGUID, unit) == guid then return unit end
+    end
+end
+
+function Death.KillerTier(guid, tr)
+    tr = tr or {}
+    local unit = Death.FindUnit(guid)
+    if not unit then
+        tr.level = "not found"
+        return
+    end
+    local level = ns.Call(UnitLevel, unit)
+    tr.level = unit .. " level " .. Seen(level)
+    if level == -1 then return "skull" end
+    local pi, enum = C_PlayerInfo, Enum and Enum.RelativeContentDifficulty
+    if pi and pi.GetContentDifficultyCreatureForPlayer and type(enum) == "table" then
+        local d = ns.Call(pi.GetContentDifficultyCreatureForPlayer, unit)
+        tr.level = tr.level .. ", difficulty " .. Seen(d)
+        if d ~= nil then
+            if d == enum.Impossible then return "red" end
+            if d == enum.Trivial then return "gray" end
+            return
+        end
+    end
+    local colors = QuestDifficultyColors
+    if type(level) == "number" and type(colors) == "table" then
+        local color = ns.Call(GetCreatureDifficultyColor, level)
+        if type(color) == "table" then
+            tr.level = tr.level .. ", colour " .. (color == colors.impossible and "impossible"
+                or color == colors.trivial and "trivial" or "other")
+            if color == colors.impossible then return "red" end
+            if color == colors.trivial then return "gray" end
+            return
+        end
+    end
+    tr.level = tr.level .. ", no colour"
+end
+
 function Death.ReadKiller(tr, deathT)
     tr = tr or {}
     local meter, recap = C_DamageMeter, C_DeathRecap
@@ -168,7 +220,9 @@ function Death.ReadKiller(tr, deathT)
     if not cause and type(env) == "string" and env ~= "" then cause = Title(env) end
     if type(killer) ~= "string" or killer == "" then killer = nil end
     if type(cause) ~= "string" or cause == "" then cause = nil end
-    if killer or cause then return killer, cause end
+    local tier
+    if killer then tier = Death.KillerTier(ns.Safe(blow.sourceGUID), tr) end
+    if killer or cause then return killer, cause, tier end
 end
 
 -- What a call gives, for the log: every answer as Seen(), or the error.
@@ -237,7 +291,7 @@ end
 local function TryKiller(final, why)
     if not pending then return end
     local tr = { why = why or "?" }
-    local killer, cause = Death.ReadKiller(tr, pending.t)
+    local killer, cause, tier = Death.ReadKiller(tr, pending.t)
     local e = pending.log
     if e then
         tr.after = ns.Now() - pending.t -- seconds after the death
@@ -253,6 +307,8 @@ local function TryKiller(final, why)
         local r = p and p.deaths[pending.t]
         if r then
             r.k, r.s = killer, cause
+            -- only who died knows it; the line and popup of others go without it
+            r.kt = tier
             if pending.sent then ns.Comm.SendRecord(pending.owner, pending.t, "R") end
             ns.Changed()
         end
@@ -271,6 +327,8 @@ function Death.Record()
         t = ns.Now(), c = class, l = ns.Call(UnitLevel, "player"),
         it = where.it, id = where.id, d = where.d, z = where.z,
     }
+    -- died in a raid boss fight: under that boss on the leaderboard
+    if rec.it == "raid" and ns.Wipe and ns.Wipe.Boss then rec.b = ns.Wipe.Boss(rec) end
     local book = ns.Book()
     -- a second death within the same second is the same death
     if not ns.Data.Add(book, me, rec, true) then return end

@@ -28,6 +28,15 @@ function Wipe.Covers(rec)
     return false
 end
 
+-- The boss of the fight this death was in (same rules as Covers); nil when none or its name is unknown.
+function Wipe.Boss(rec)
+    for i = #fights, 1, -1 do
+        local f = fights[i]
+        local here = f.iid and rec.id == f.iid or (not f.iid and rec.z == f.z)
+        if here and rec.t >= f.start and (not f.stop or rec.t <= f.stop + 1) then return f.name end
+    end
+end
+
 function Wipe.Claimed(key)
     local at = claims[key]
     return at ~= nil and GetTime() - at < Wipe.CLAIM_WINDOW
