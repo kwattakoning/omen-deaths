@@ -14,11 +14,12 @@ This link always gives the newest version. The addon tells you in-game when a ne
 
 - Counts every death and shares it with everyone in the guild who has the addon
 - Leaderboard for Today, This Week, This Month and All Time, per place: Everywhere, Open World,
-  Dungeons, Raids (each raid on its own) and Battlegrounds
+  Dungeons, Raids (each raid and each raid boss on its own) and Battlegrounds
 - All Time also counts the deaths from before you installed the addon (from the game's own statistics)
 - Killers: which mobs (and falls) kill us the most
-- A funny line in guild chat when you die. The "Guild chat" button has three settings:
-  **No BG** (default: not for deaths in battlegrounds), **Off** and **On**
+- A funny line in guild chat when you die, fitting how you died: a fall, lava, your role in a dungeon,
+  a mob way above your level or a gray one. Die the same way again and it gets worse.
+  The "Guild chat" button has three settings: **No BG** (default), **Off** and **On**
 - One summary in guild chat per boss fight instead of a line per death
 - Only shows players who are in the guild now
 
