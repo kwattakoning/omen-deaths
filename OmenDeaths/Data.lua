@@ -4,13 +4,14 @@
 -- record = { t = server time, c = class, l = level, it = instance type ("none", "party", "raid",
 --            "pvp", "arena", ...), id = instance ID, d = difficulty ID, z = zone or instance name,
 --            k = killer name, s = spell or cause, b = raid boss of the fight it happened in (v0.8.7),
+--            r = role: "tank", "healer", "dps" (v0.8.9, nil = unknown),
 --            kt = colour of the killer's level: "skull", "red", "gray" (own deaths only, not sent) }
 -- A death is known by its owner and its second (t): nobody dies twice in one second.
 local _, ns = ...
 local Data = {}
 ns.Data = Data
 
-local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b" }
+local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b", "r" }
 
 -- Adds or completes a record. `authoritative` = the owner sent it, so it may overwrite.
 -- Returns "new", "updated" or nil (nothing changed).

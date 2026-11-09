@@ -434,7 +434,16 @@ function UI.Refresh()
     local scope = scopes[index]
     frame.place:SetText(scope.short or scope.label)
     for _, b in ipairs(tabs) do Select(b, b.period == state.period) end
-    for _, b in ipairs(viewButtons) do Select(b, b.view == state.view) end
+    -- Health only for whoever switched it on (/omen health, saved for the whole account; 09-11-2026,
+    -- wish of the user: "alleen voor mij"). The reports still arrive for everyone.
+    local health = ns.db.settings.showHealth == true
+    if state.view == "health" and not health then state.view = "players" end
+    for _, b in ipairs(viewButtons) do
+        if b.view == "health" then
+            if health then b:Show() else b:Hide() end
+        end
+        Select(b, b.view == state.view)
+    end
 
     local list
     if state.view == "health" then
@@ -545,4 +554,16 @@ function UI.Frame() return frame end
 -- /omen opens the window as well (the minimap button is the main way in).
 SLASH_OMENDEATHS1 = "/omen"
 SLASH_OMENDEATHS2 = "/omendeaths"
-SlashCmdList.OMENDEATHS = function() UI.Toggle() end
+-- /omen health shows or hides the Health tab (for this whole account).
+function UI.Slash(msg)
+    msg = type(msg) == "string" and msg:lower():match("^%s*(.-)%s*$") or ""
+    if msg == "health" then
+        if not ns.db then return end
+        ns.db.settings.showHealth = not ns.db.settings.showHealth
+        ns.Print("Health tab " .. (ns.db.settings.showHealth and "on" or "off") .. ".")
+        UI.Refresh()
+        return
+    end
+    UI.Toggle()
+end
+SlashCmdList.OMENDEATHS = function(msg) UI.Slash(msg) end

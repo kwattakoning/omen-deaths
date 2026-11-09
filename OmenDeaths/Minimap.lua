@@ -1,4 +1,4 @@
--- Omen Deaths: the skull button on the minimap. Click opens the window, drag moves it around the edge.
+-- Omen Deaths: the button with the guild logo on the minimap. Click opens the window, drag moves it around the edge.
 local _, ns = ...
 local Mini = {}
 ns.Minimap = Mini

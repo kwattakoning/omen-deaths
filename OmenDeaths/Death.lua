@@ -318,6 +318,38 @@ local function TryKiller(final, why)
     end
 end
 
+-- My role, for lines that fit it (09-11-2026: a tank got "found out why the tank goes first").
+-- 1) the role chosen in the group (UnitGroupRolesAssigned, as HealKit reads it in this client);
+-- 2) else the talent tree with the most points (as ForeverGuide reads GetTalentTabInfo: the first
+--    number from the third answer on). A feral druid can be bear or cat: unknown.
+-- Unknown = nil: lines that fit every role.
+Death.ROLE_NAMES = { TANK = "tank", HEALER = "healer", DAMAGER = "dps" }
+Death.TREE_ROLES = {
+    WARRIOR = { "dps", "dps", "tank" }, PALADIN = { "healer", "tank", "dps" }, PRIEST = { "healer", "healer", "dps" },
+    SHAMAN = { "dps", "dps", "healer" }, DRUID = { "dps", nil, "healer" },
+    MAGE = { "dps", "dps", "dps" }, ROGUE = { "dps", "dps", "dps" }, HUNTER = { "dps", "dps", "dps" },
+    WARLOCK = { "dps", "dps", "dps" },
+}
+function Death.Role()
+    local chosen = Death.ROLE_NAMES[ns.Call(UnitGroupRolesAssigned, "player") or ""]
+    if chosen then return chosen end
+    local _, class = ns.Call(UnitClass, "player")
+    local map = Death.TREE_ROLES[class or ""]
+    if not map or type(GetTalentTabInfo) ~= "function" then return nil end
+    local best, bi = 0, nil
+    for i = 1, 3 do
+        local r = { pcall(GetTalentTabInfo, i) }
+        if r[1] then
+            local pts
+            for j = 4, #r do
+                if not pts and not ns.IsSecret(r[j]) and type(r[j]) == "number" and r[j] >= 0 and r[j] <= 61 then pts = r[j] end
+            end
+            if pts and pts > best then best, bi = pts, i end
+        end
+    end
+    return bi and map[bi] or nil
+end
+
 function Death.Record()
     local me = ns.MyName()
     if not me or not ns.db then return end
@@ -327,6 +359,7 @@ function Death.Record()
         t = ns.Now(), c = class, l = ns.Call(UnitLevel, "player"),
         it = where.it, id = where.id, d = where.d, z = where.z,
     }
+    rec.r = Death.Role()
     -- died in a raid boss fight: under that boss on the leaderboard
     if rec.it == "raid" and ns.Wipe and ns.Wipe.Boss then rec.b = ns.Wipe.Boss(rec) end
     local book = ns.Book()

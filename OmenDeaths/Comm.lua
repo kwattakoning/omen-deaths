@@ -51,15 +51,22 @@ local function Clean(s, max)
     return s
 end
 
--- The raid boss (v0.8.7) comes last, so older versions read their 11 fields and leave it. It gets
--- what is left of MAX_LEN after the rest; a name that does not fit whole is left out (a cut-off
--- name would make a boss of its own on the leaderboard).
+-- The raid boss (field 12, v0.8.7) and the role (field 13, v0.8.9: T, H or D) come last, so older
+-- versions read their 11 or 12 fields and leave the rest. The role goes first (2 bytes); the boss
+-- gets what is left of MAX_LEN, and a name that does not fit whole is left out (a cut-off name
+-- would make a boss of its own on the leaderboard).
+Comm.ROLE_CODE = { tank = "T", healer = "H", dps = "D" }
+Comm.ROLE_FROM = { T = "tank", H = "healer", D = "dps" }
 function Comm.EncodeRecord(kind, owner, r)
     local n = Comm.TEXT_LEN
     local msg = table.concat({ kind, Clean(owner, Comm.NAME_LEN), tostring(r.t), Clean(r.c, 11), tostring(r.l or ""),
         Clean(r.it, 8), tostring(r.id or ""), tostring(r.d or ""), Clean(r.z, n), Clean(r.k, n), Clean(r.s, n) }, "|")
+    local role = Comm.ROLE_CODE[r.r or ""]
+    local tail = role and (1 + #role) or 0
     local boss = Clean(r.b, Comm.MAX_LEN)
-    if boss ~= "" and #msg + 1 + #boss <= Comm.MAX_LEN then msg = msg .. "|" .. boss end
+    if boss ~= "" and #msg + 1 + #boss + tail > Comm.MAX_LEN then boss = "" end
+    if boss ~= "" or role then msg = msg .. "|" .. boss end
+    if role and #msg + 1 + #role <= Comm.MAX_LEN then msg = msg .. "|" .. role end
     return msg
 end
 
@@ -95,7 +102,7 @@ function Comm.DecodeRecord(msg)
     if not t or not Text(p[2]) then return nil end
     return p[1], p[2], {
         t = t, c = Text(p[4]), l = tonumber(p[5]), it = Text(p[6]), id = tonumber(p[7]), d = tonumber(p[8]),
-        z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]),
+        z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]), r = Comm.ROLE_FROM[p[13] or ""],
     }
 end
 
@@ -315,9 +322,11 @@ end
 function Comm.UpdateText()
     if not Comm.newest then return nil end
     -- the addon cannot see files on disk: a version downloaded but not loaded yet still says the old
-    -- number, hence the hint (08-11-2026)
+    -- number, hence the hint (08-11-2026). A restart, not /reload (09-11-2026): a new file in the
+    -- addon (the logo of 0.8.8) only loads after a restart, and this old version cannot know
+    -- whether the new one has such a file. A restart always works.
     return "Omen Deaths " .. Comm.newest .. " is out (you have " .. ns.VERSION .. "). Download: " .. ns.DOWNLOAD
-        .. " - already downloaded? Type /reload"
+        .. " - this update requires a game restart"
 end
 
 local function Seen(sender, version)

@@ -37,7 +37,7 @@ and makes fun of every death in guild chat.
     left) and check that "Omen Deaths" is ticked. If it says "out of
     date", tick "Load out of date AddOns" at the top.
 
- 5. Log in. You'll see a little skull button on the edge of your
+ 5. Log in. You'll see a little round button with the Omen tree on the edge of your
     minimap. That's it!
 
  Updating: when a guildie runs a newer version, the addon tells you in
@@ -80,12 +80,12 @@ and makes fun of every death in guild chat.
  3. THE WINDOW
 ---------------------------------------------------------------------
 
- Open it by clicking the skull on the minimap (or type /omen).
- Close it with the X, with Escape, or by clicking the skull again.
- Drag the window by its edge to move it. Drag the minimap skull to
+ Open it by clicking the Omen button on the minimap (or type /omen).
+ Close it with the X, with Escape, or by clicking the button again.
+ Drag the window by its edge to move it. Drag the minimap button to
  move it around the minimap.
 
- Hover over the minimap skull to see this week's #1 and your own count.
+ Hover over the minimap button to see this week's #1 and your own count.
 
  TABS (top row)
    Today        deaths since the last daily reset
@@ -176,7 +176,7 @@ and makes fun of every death in guild chat.
  6. QUESTIONS
 ---------------------------------------------------------------------
 
- I don't see the skull on my minimap.
+ I don't see the Omen button on my minimap.
    Check that the folder is in the right place (step 3) and that the
    addon is ticked in the AddOns list (step 4). A brand-new addon needs
    a full restart of the game; /reload is not enough the first time.

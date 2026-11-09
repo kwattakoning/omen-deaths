@@ -32,7 +32,8 @@ Open it with `/omen` or the minimap button.
    It must end up as `...\AddOns\OmenDeaths\OmenDeaths.toc`
    (not `...\AddOns\OmenDeaths\OmenDeaths\...`).
 
-Updating works the same way: delete the old `OmenDeaths` folder and put the new one in its place.
+Updating works the same way: delete the old `OmenDeaths` folder and put the new one in its place,
+then restart the game (a /reload is not always enough).
 Your deaths are saved elsewhere, so you keep them.
 
 More help: `HOW-TO-INSTALL.txt` inside the zip.

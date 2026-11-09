@@ -310,17 +310,17 @@ end
 function Toast.Death(owner, rec)
     if not ns.db or not rec then return end
     local mine = owner == ns.MyName()
-    local headline, named, template
+    local headline, named, template, n
     if mine then
         headline, named = Pick(SELF), false
     else
-        headline, named, template = ns.Lines.For(rec, owner)
+        headline, named, template, n = ns.Lines.For(rec, owner)
     end
     local detail = Toast.Detail(owner, rec, named)
     Toast.last = { headline = headline, detail = detail }
     if ns.db.settings.chat then
         -- the popup's line, with the name in class colour
-        local text = mine and headline or ns.Lines.Render(template, ns.Colored(owner, ns.ClassColor(rec.c)), rec.k)
+        local text = mine and headline or ns.Lines.Render(template, ns.Colored(owner, ns.ClassColor(rec.c)), rec.k, n)
         ns.Print(text .. (detail ~= "" and (" — " .. detail) or ""))
     end
     if ns.db.settings.toast then
