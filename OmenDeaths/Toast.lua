@@ -307,9 +307,22 @@ function Toast.Detail(owner, rec, named)
     return table.concat(parts, " · ")
 end
 
+-- A guildie died (0.9.0, off unless switched on): the game's own player death scream, by the gender
+-- of who died (chosen by the user by ear, 10-11-2026). IDs: Wowhead Classic HumanMalePlayerDeath 2944,
+-- HumanFemalePlayerDeath 2940; 2944 also used by the Forever addon PetHealthWatch-Forever.
+-- Unknown gender (older versions do not send it): male, the user's pick.
+Toast.SOUND_MALE, Toast.SOUND_FEMALE = 2944, 2940
+Toast.SOUND_FALLBACK = 847 -- SOUNDKIT.IG_QUEST_FAILED, if the client cannot play the scream
+function Toast.Sound(gender)
+    if not PlaySound then return end
+    local ok, willPlay = pcall(PlaySound, gender == "f" and Toast.SOUND_FEMALE or Toast.SOUND_MALE)
+    if not ok or willPlay == false then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_QUEST_FAILED or Toast.SOUND_FALLBACK) end
+end
+
 function Toast.Death(owner, rec)
     if not ns.db or not rec then return end
     local mine = owner == ns.MyName()
+    if not mine and ns.db.settings.sound then Toast.Sound(rec.g) end
     local headline, named, template, n
     if mine then
         headline, named = Pick(SELF), false

@@ -61,12 +61,26 @@ function Comm.EncodeRecord(kind, owner, r)
     local n = Comm.TEXT_LEN
     local msg = table.concat({ kind, Clean(owner, Comm.NAME_LEN), tostring(r.t), Clean(r.c, 11), tostring(r.l or ""),
         Clean(r.it, 8), tostring(r.id or ""), tostring(r.d or ""), Clean(r.z, n), Clean(r.k, n), Clean(r.s, n) }, "|")
-    local role = Comm.ROLE_CODE[r.r or ""]
-    local tail = role and (1 + #role) or 0
-    local boss = Clean(r.b, Comm.MAX_LEN)
-    if boss ~= "" and #msg + 1 + #boss + tail > Comm.MAX_LEN then boss = "" end
-    if boss ~= "" or role then msg = msg .. "|" .. boss end
-    if role and #msg + 1 + #role <= Comm.MAX_LEN then msg = msg .. "|" .. role end
+    -- after the fixed fields: boss (12), role (13), gender (14, 0.9.0: m/f for the death sound).
+    -- Role and gender are one letter each and go before the boss in the byte budget.
+    local extra = { Clean(r.b, Comm.MAX_LEN), Comm.ROLE_CODE[r.r or ""] or "", (r.g == "m" or r.g == "f") and r.g or "" }
+    local function size(from, to)
+        local n = 0
+        for i = from, to do n = n + 1 + #extra[i] end
+        return n
+    end
+    local last = 0
+    for i = 1, 3 do if extra[i] ~= "" then last = i end end
+    while last >= 2 and #msg + size(2, last) > Comm.MAX_LEN do
+        extra[last] = ""
+        last = last - 1
+        while last >= 2 and extra[last] == "" do last = last - 1 end
+    end
+    if extra[1] ~= "" and #msg + size(1, math.max(last, 1)) > Comm.MAX_LEN then
+        extra[1] = ""
+        if last == 1 then last = 0 end
+    end
+    for i = 1, last do msg = msg .. "|" .. extra[i] end
     return msg
 end
 
@@ -103,6 +117,7 @@ function Comm.DecodeRecord(msg)
     return p[1], p[2], {
         t = t, c = Text(p[4]), l = tonumber(p[5]), it = Text(p[6]), id = tonumber(p[7]), d = tonumber(p[8]),
         z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]), r = Comm.ROLE_FROM[p[13] or ""],
+        g = (p[14] == "m" or p[14] == "f") and p[14] or nil,
     }
 end
 
@@ -303,6 +318,9 @@ local function OnVector(sender, v)
     Push({ msg = "P|" .. ns.Announced() })
     local claim = Comm.UpdateClaim()
     if claim then Push({ msg = claim }) end
+    local awards = ns.Awards and ns.Awards.Claim()
+    if awards then Push({ msg = awards }) end
+    if ns.Repair then ns.Repair.SendMine() end
 end
 
 -- "0.10.0" > "0.9.0": compares number by number.
@@ -325,7 +343,7 @@ function Comm.UpdateText()
     -- number, hence the hint (08-11-2026). A restart, not /reload (09-11-2026): a new file in the
     -- addon (the logo of 0.8.8) only loads after a restart, and this old version cannot know
     -- whether the new one has such a file. A restart always works.
-    return "Omen Deaths " .. Comm.newest .. " is out (you have " .. ns.VERSION .. "). Download: " .. ns.DOWNLOAD
+    return "Omen Deaths " .. Comm.newest .. " is out (you have " .. ns.VERSION .. "). Update in the CurseForge app or at " .. ns.DOWNLOAD
         .. " - this update requires a game restart"
 end
 
@@ -384,6 +402,24 @@ function Comm.OnMessage(prefix, msg, channel, sender)
     elseif kind == "W" then
         local key = msg:match("^W|(.+)$")
         if key and ns.Wipe then ns.Wipe.HeardClaim(key) end
+    elseif kind == "M" then
+        -- repairs: only a player's report about themselves counts
+        local owner, days
+        if ns.Repair then owner, days = ns.Repair.Decode(msg) end
+        if owner then
+            owner = ns.ShortName(owner)
+            Seen(sender)
+            local changed = false
+            if ns.SameChar(owner, sender) then
+                for _, d in ipairs(days) do
+                    if ns.Repair.Add(ns.Book(), owner, d.day, d.c, d.n) then changed = true end
+                end
+            end
+            if changed then ns.Changed() end
+        end
+    elseif kind == "A" then
+        local week = msg:match("^A|(%d+)$")
+        if week and ns.Awards then ns.Awards.Heard(week) end
     elseif kind == "U" then
         local v = msg:match("^U|(.+)$")
         if v then Comm.HeardUpdateClaim(v) end
@@ -427,6 +463,7 @@ end
 -- 0..RELAY_JITTER, so two loading at the same time do not both post (as Wipe does).
 Comm.UPDATE_WAIT = Comm.RELAY_JITTER + 0.55
 local sessionStart
+function Comm.SessionStart() return sessionStart end
 
 local function SeenVersion(book, version)
     if not book.updateSeen or Comm.Newer(version, book.updateSeen) then book.updateSeen = version end
@@ -438,7 +475,7 @@ end
 
 function Comm.UpdateLine()
     return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version"
-        .. " so your guildies can mentally support you when you die: " .. ns.DOWNLOAD)
+        .. " so your guildies can mentally support you when you die: CurseForge app or " .. ns.DOWNLOAD)
 end
 
 -- A saved Health report from before this session: another guildie on this version or newer.
@@ -503,8 +540,14 @@ local function TrySync()
     sessionStart = sessionStart or ns.Now()
     Comm.SendVector()
     Comm.SendHealth()
+    if ns.Repair then ns.Repair.SendMine() end
     local wait = Comm.UPDATE_WAIT + math.random() * Comm.RELAY_JITTER
-    if C_Timer and C_Timer.After then C_Timer.After(wait, Comm.MaybeAnnounce) end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(wait, function()
+            Comm.MaybeAnnounce()
+            if ns.Awards then ns.Awards.Maybe() end
+        end)
+    end
     if C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
     ns.Changed()
 end

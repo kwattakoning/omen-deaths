@@ -222,61 +222,17 @@ function Death.ReadKiller(tr, deathT)
     if type(cause) ~= "string" or cause == "" then cause = nil end
     local tier
     if killer then tier = Death.KillerTier(ns.Safe(blow.sourceGUID), tr) end
-    if killer or cause then return killer, cause, tier end
-end
-
--- What a call gives, for the log: every answer as Seen(), or the error.
-local function Answer(fn, ...)
-    if type(fn) ~= "function" then return "missing" end
-    local r = { pcall(fn, ...) }
-    if not r[1] then return "error " .. tostring(r[2]):sub(1, 100) end
-    local out = {}
-    for i = 2, math.max(2, #r) do out[#out + 1] = Seen(r[i]) end
-    return table.concat(out, ", ")
-end
-
--- The fields of a table as Seen() shows them (only string keys).
-local function Fields(t)
-    local out = {}
-    if type(t) == "table" and not ns.IsSecret(t) then
-        for k, v in pairs(t) do
-            if type(k) == "string" then out[k] = Seen(v) end
-        end
+    -- one hit from full health (0.9.0): health before the blow at least the recap's max health.
+    -- Measured 10-11-2026: after death the game gives a max a bit lower than the real one
+    -- (1406 vs 1526 before a fall from full), every fall from full health had currentHP >= max.
+    local oneShot
+    if killer and recap.GetRecapMaxHealth then
+        local max = type(recapID) == "number" and ns.Call(recap.GetRecapMaxHealth, recapID) or ns.Call(recap.GetRecapMaxHealth)
+        local hp = ns.Safe(blow.currentHP)
+        tr.maxHealth = Seen(max)
+        oneShot = type(max) == "number" and max > 0 and type(hp) == "number" and hp >= max or nil
     end
-    return out
-end
-
--- Measurement v0.6.1: the fall of 08-11-2026 was not in the damage meter at all. Other ways:
--- is the meter on, which sessions it has, and the recap functions without a recap ID
--- (in other WoW versions that is the most recent recap, as Blizzard's own Recap button reads it).
-Death.PROBE_SESSIONS = 5 -- sessions written out per try; the rest only counted
-function Death.Probe()
-    local meter, recap = C_DamageMeter or {}, C_DeathRecap or {}
-    local p = {
-        available = Answer(meter.IsDamageMeterAvailable),
-        has = Answer(recap.HasRecapEvents),
-        link = Answer(recap.GetRecapLink),
-        maxHealth = Answer(recap.GetRecapMaxHealth),
-        events = Answer(recap.GetRecapEvents),
-    }
-    local ok, sessions = pcall(meter.GetAvailableCombatSessions or error)
-    if ok and type(sessions) == "table" and not ns.IsSecret(sessions) then
-        p.sessions = { n = #sessions }
-        for i = 1, math.min(#sessions, Death.PROBE_SESSIONS) do p.sessions[i] = Fields(sessions[i]) end
-    else
-        p.sessions = ok and Seen(sessions) or "error"
-    end
-    -- the latest event of the recap without an ID, all its fields
-    local okE, events = pcall(recap.GetRecapEvents or error)
-    if okE and type(events) == "table" and not ns.IsSecret(events) and #events > 0 then
-        local blow, latest = events[1], nil
-        for _, e in ipairs(events) do
-            local ts = ns.Safe(type(e) == "table" and e.timestamp or nil)
-            if type(ts) == "number" and (not latest or ts > latest) then blow, latest = e, ts end
-        end
-        p.blow = Fields(blow)
-    end
-    return p
+    if killer or cause then return killer, cause, tier, oneShot end
 end
 
 -- The death is complete (killer known, or given up on): time for the guild chat line.
@@ -291,12 +247,11 @@ end
 local function TryKiller(final, why)
     if not pending then return end
     local tr = { why = why or "?" }
-    local killer, cause, tier = Death.ReadKiller(tr, pending.t)
+    local killer, cause, tier, oneShot = Death.ReadKiller(tr, pending.t)
     local e = pending.log
     if e then
         tr.after = ns.Now() - pending.t -- seconds after the death
         tr.killer, tr.cause = killer, cause
-        tr.probe = Death.Probe()
         e.tries = e.tries + 1
         if not e.first then e.first = tr else e.last = tr end
         if killer or cause then e.found = true end
@@ -309,6 +264,7 @@ local function TryKiller(final, why)
             r.k, r.s = killer, cause
             -- only who died knows it; the line and popup of others go without it
             r.kt = tier
+            r.os = oneShot
             if pending.sent then ns.Comm.SendRecord(pending.owner, pending.t, "R") end
             ns.Changed()
         end
@@ -360,11 +316,18 @@ function Death.Record()
         it = where.it, id = where.id, d = where.d, z = where.z,
     }
     rec.r = Death.Role()
+    -- 0.9.0: the death sound of guildies follows the gender (UnitSex: 2 = male, 3 = female)
+    local sex = ns.Safe(ns.Call(UnitSex, "player"))
+    rec.g = sex == 3 and "f" or sex == 2 and "m" or nil
     -- died in a raid boss fight: under that boss on the leaderboard
     if rec.it == "raid" and ns.Wipe and ns.Wipe.Boss then rec.b = ns.Wipe.Boss(rec) end
     local book = ns.Book()
     -- a second death within the same second is the same death
     if not ns.Data.Add(book, me, rec, true) then return end
+    -- only for my own line, not sent (0.9.0): when my fight began (together), a level-up this session
+    local stored = book.players[me].deaths[rec.t]
+    stored.fs = Death.FightStart(rec.t)
+    stored.lu, Death.dinged = Death.dinged, nil
     pending = { owner = me, t = rec.t }
     -- the measurement log entry of this death; the oldest goes past LOG_KEEP
     local log = ns.db.recapLog or {}
@@ -381,6 +344,58 @@ function Death.Record()
     ns.Changed()
     if ns.Toast then ns.Toast.Death(me, book.players[me].deaths[rec.t]) end
 end
+
+-- My fight (0.9.0, "together"): from PLAYER_REGEN_DISABLED. Dying ends the fight, so REGEN_ENABLED can
+-- come just before PLAYER_DEAD; ended in the second of the death (or the one before, as the clock
+-- counts whole seconds) still counts. Out of a fight (a fall): only deaths in the same second.
+local fight = {}
+ns.On("PLAYER_REGEN_DISABLED", function() fight.start, fight.ended = ns.Now(), nil end)
+ns.On("PLAYER_REGEN_ENABLED", function() fight.ended = ns.Now() end)
+function Death.FightStart(t)
+    if fight.start and (not fight.ended or fight.ended >= t - 1) then return fight.start end
+    return t
+end
+
+-- A level-up this session (0.9.0): the next death says so.
+ns.On("PLAYER_LEVEL_UP", function(level)
+    level = ns.Safe(level)
+    Death.dinged = type(level) == "number" and level or ns.Call(UnitLevel, "player")
+end)
+
+-- Measurement (0.9.0): how did I come back? Spirit Healer or own corpse. CONFIRM_XP_LOSS is the
+-- Spirit Healer's question in other WoW versions, Resurrection Sickness (15007) its debuff.
+-- Not proven in Forever: logged per death in recapLog[..].back, check-data.js shows it.
+Death.SICKNESS = 15007
+local xpLossAsked
+ns.On("CONFIRM_XP_LOSS", function() xpLossAsked = ns.Now() end)
+local function Sick()
+    local api = C_UnitAuras
+    if not (api and api.GetPlayerAuraBySpellID) then return "no api" end
+    local ok, aura = pcall(api.GetPlayerAuraBySpellID, Death.SICKNESS)
+    if not ok then return "error" end
+    if ns.IsSecret(aura) then return "secret" end
+    return aura and "yes" or "no"
+end
+local function NoteBack(event)
+    local log = ns.db and ns.db.recapLog
+    local e = log and log[#log]
+    if not e or e.back then return end
+    local now = ns.Now()
+    e.back = { event = event, after = now - e.t, ghost = tostring(ns.Call(UnitIsGhost, "player")),
+        xpLoss = xpLossAsked and xpLossAsked >= e.t and (now - xpLossAsked) or nil }
+    xpLossAsked = nil
+    -- the debuff can come a moment later
+    if C_Timer and C_Timer.After then
+        C_Timer.After(Death.RECHECK, function() e.back.sick = Sick() end)
+    else
+        e.back.sick = Sick()
+    end
+end
+ns.On("PLAYER_UNGHOST", function() NoteBack("PLAYER_UNGHOST") end)
+ns.On("PLAYER_ALIVE", function()
+    -- PLAYER_ALIVE also comes at Release Spirit (then a ghost): only alive counts
+    if ns.Call(UnitIsGhost, "player") ~= true then NoteBack("PLAYER_ALIVE") end
+end)
 
 -- Deaths saved under the first name only (before v0.5) move to the full name.
 ns.On("PLAYER_LOGIN", function()

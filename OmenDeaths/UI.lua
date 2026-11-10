@@ -10,6 +10,7 @@ local CRIMSON = { 0.77, 0.12, 0.23 }
 local SKULL = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8"
 local BONE = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
+local COIN = "Interface\\MoneyFrame\\UI-GoldIcon"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MORPHEUS = "Fonts\\MORPHEUS.TTF"
 
@@ -121,6 +122,7 @@ local function BuildRow(parent, i)
     skull:SetSize(16, 16)
     skull:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     skull:SetTexture(SKULL)
+    row.skull = skull
 
     local count = Font(row, 18)
     count:SetPoint("RIGHT", skull, "LEFT", -6, 0)
@@ -224,9 +226,10 @@ local function Build()
 
     -- view and place
     viewButtons = {}
-    for i, v in ipairs({ { "players", "The Fallen" }, { "killers", "Killers" }, { "health", "Health" } }) do
-        local b = Button(frame, v[2], 72)
-        b:SetPoint("TOPLEFT", frame, "TOPLEFT", 22 + (i - 1) * 76, -132)
+    -- 0.9.0: four views; 66 wide, 68 apart (Health only shows for whoever switched it on)
+    for i, v in ipairs({ { "players", "The Fallen" }, { "killers", "Killers" }, { "repairs", "Repairs" }, { "health", "Health" } }) do
+        local b = Button(frame, v[2], 66)
+        b:SetPoint("TOPLEFT", frame, "TOPLEFT", 22 + (i - 1) * 68, -132)
         b:SetScript("OnClick", function()
             state.view = v[1]
             UI.offset = 0
@@ -237,8 +240,27 @@ local function Build()
     end
     local prev = Button(frame, "<", 24)
     prev:SetPoint("TOPLEFT", frame, "TOPLEFT", 252, -132)
+    frame.prev = prev
     local nextB = Button(frame, ">", 24)
     nextB:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -22, -132)
+    frame.nextB = nextB
+    -- in the Repairs view the place means nothing: the auto repair switch stands there
+    local repairB = Button(frame, "", 150)
+    repairB:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -22, -132)
+    repairB:SetScript("OnClick", function()
+        state.autoRepair = not state.autoRepair
+        UI.Refresh()
+    end)
+    repairB:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("Auto repair")
+        GameTooltip:AddLine("Repairs all your gear when you open a merchant who can repair.", 1, 1, 1)
+        GameTooltip:AddLine("The guild pays when it lets you, else you do.", 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    repairB:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    repairB:Hide()
+    frame.repairButton = repairB
     local place = Font(frame, 15)
     place:SetPoint("LEFT", prev, "RIGHT", 4, 0)
     place:SetPoint("RIGHT", nextB, "LEFT", -4, 0)
@@ -320,6 +342,22 @@ local function Build()
         UI.Refresh()
     end)
     frame.bannerButton = banner
+    local sound = Button(frame, "", 80)
+    sound:SetPoint("RIGHT", banner, "LEFT", -4, 0)
+    sound:SetScript("OnClick", function()
+        state.sound = not state.sound
+        -- a sample, in my own gender
+        if state.sound and ns.Toast then ns.Toast.Sound(ns.Call(UnitSex, "player") == 3 and "f" or "m") end
+        UI.Refresh()
+    end)
+    sound:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("Sound")
+        GameTooltip:AddLine("The human death scream when a guildie dies. Only you hear it.", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    sound:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame.soundButton = sound
 
     frame:Hide()
 end
@@ -405,7 +443,11 @@ end
 function UI.Tooltip(row)
     if not row.data then return end
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    if row.kind == "players" then
+    if row.kind == "repairs" then
+        local d = row.data
+        GameTooltip:SetText(d.name, ns.ClassColor(d.class))
+        GameTooltip:AddLine(("%s on %d %s"):format(ns.Repair.Money(d.count), d.n, d.n == 1 and "repair" or "repairs"), 1, 1, 1)
+    elseif row.kind == "players" then
         PlayerTooltip(row)
     elseif row.kind == "health" then
         HealthTooltip(row)
@@ -444,12 +486,22 @@ function UI.Refresh()
         end
         Select(b, b.view == state.view)
     end
+    local repairs = state.view == "repairs"
+    frame.prev:ClearAllPoints()
+    frame.prev:SetPoint("TOPLEFT", frame, "TOPLEFT", health and 298 or 252, -132)
+    for _, w in ipairs({ frame.prev, frame.nextB, frame.place }) do
+        if repairs then w:Hide() else w:Show() end
+    end
+    if repairs then frame.repairButton:Show() else frame.repairButton:Hide() end
+    frame.repairButton:SetText("Auto repair: " .. (state.autoRepair and "On" or "Off"))
 
     local list
     if state.view == "health" then
         list = ns.Health.List(book)
     elseif state.view == "killers" then
         list = ns.Data.Killers(book, state.period, scope, now)
+    elseif repairs then
+        list = ns.Repair.Board(book, state.period, now)
     else
         list = ns.Data.Leaderboard(book, state.period, scope, now)
     end
@@ -473,9 +525,15 @@ function UI.Refresh()
             else
                 row.rank:SetTextColor(0.6, 0.6, 0.6)
             end
-            row.count:SetText(d.count)
+            row.count:SetText(repairs and ns.Repair.Short(d.count) or d.count)
+            row.skull:SetTexture(repairs and COIN or SKULL)
             row.bar:SetWidth(math.max(1, 412 * d.count / top))
-            if state.view == "health" then
+            if repairs then
+                row.icon:SetTexture(ns.ClassIcon(d.class))
+                row.name:SetText(d.name)
+                row.name:SetTextColor(ns.ClassColor(d.class))
+                row.sub:SetText(("%d %s · %s"):format(d.n, d.n == 1 and "repair" or "repairs", ns.Repair.Money(d.count)))
+            elseif state.view == "health" then
                 row.icon:SetTexture(ns.ClassIcon(d.class))
                 row.name:SetText(d.name)
                 row.name:SetTextColor(ns.ClassColor(d.class))
@@ -495,7 +553,8 @@ function UI.Refresh()
     end
 
     if #list == 0 then
-        frame.empty:SetText(state.view == "health" and "No reports yet. Guildies need Omen Deaths 0.8.0 or newer."
+        frame.empty:SetText(repairs and "No repair bills yet. Everyone's gear is shiny."
+            or state.view == "health" and "No reports yet. Guildies need Omen Deaths 0.8.0 or newer."
             or state.view == "killers" and "Nothing has killed us here. Yet." or "Nobody died here. Suspicious.")
         frame.empty:Show()
     else
@@ -505,7 +564,11 @@ function UI.Refresh()
     local total = ns.Data.Total(book, state.period, scope, now)
     local killers = ns.Data.Killers(book, state.period, scope, now)
     local deadliest = killers[1] and killers[1].name ~= ns.Data.UNKNOWN and killers[1]
-    if state.view == "health" then
+    if repairs then
+        local sum = 0
+        for _, d in ipairs(list) do sum = sum + d.count end
+        frame.foot1:SetText(("%s: %s on repairs"):format(ns.Data.PERIOD_LABEL[state.period], ns.Repair.Money(sum)))
+    elseif state.view == "health" then
         local bad = 0
         for _, d in ipairs(list) do if d.count > 0 then bad = bad + 1 end end
         frame.foot1:SetText(("Health: %d %s reported, %d with problems"):format(#list, #list == 1 and "player" or "players", bad))
@@ -519,14 +582,20 @@ function UI.Refresh()
         if d.name == me then mine = d.count end
     end
     local online = ns.Comm.OnlinePeers()
-    frame.foot2:SetText(("You: %d  ·  %d %s online with Omen Deaths"):format(mine, online, online == 1 and "guildie" or "guildies"))
+    if repairs then
+        mine = 0
+        for _, d in ipairs(list) do if d.name == me then mine = d.count end end
+        mine = ns.Repair.Money(mine)
+    end
+    frame.foot2:SetText(("You: %s  ·  %d %s online with Omen Deaths"):format(mine, online, online == 1 and "guildie" or "guildies"))
 
     frame.guildButton:SetText("Guild chat: " .. (not state.guildChat and "Off" or state.guildChatBG and "On" or "No BG"))
     frame.chatButton:SetText("My chat: " .. (state.chat and "On" or "Off"))
     frame.bannerButton:SetText("Popup: " .. (state.toast and "On" or "Off"))
+    frame.soundButton:SetText("Sound: " .. (state.sound and "On" or "Off"))
     -- an old version: the line under the title says so, in orange, until the addon is updated
     -- short, to fit the one line under the title
-    local update = ns.Comm.newest and ("Update to " .. ns.Comm.newest .. " (you have " .. ns.VERSION .. "): " .. ns.DOWNLOAD)
+    local update = ns.Comm.newest and ("Update to " .. ns.Comm.newest .. " (you have " .. ns.VERSION .. "): CurseForge app or GitHub")
     if update then
         frame.quip:SetText(update)
         frame.quip:SetTextColor(1, 0.6, 0)
@@ -557,6 +626,13 @@ SLASH_OMENDEATHS2 = "/omendeaths"
 -- /omen health shows or hides the Health tab (for this whole account).
 function UI.Slash(msg)
     msg = type(msg) == "string" and msg:lower():match("^%s*(.-)%s*$") or ""
+    if msg == "repair" then
+        if not ns.db then return end
+        ns.db.settings.autoRepair = not ns.db.settings.autoRepair
+        ns.Print("Auto repair " .. (ns.db.settings.autoRepair and "on" or "off") .. ".")
+        UI.Refresh()
+        return
+    end
     if msg == "health" then
         if not ns.db then return end
         ns.db.settings.showHealth = not ns.db.settings.showHealth

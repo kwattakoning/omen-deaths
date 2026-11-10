@@ -22,7 +22,12 @@ This link always gives the newest version. The addon tells you in-game when a ne
 - A funny line in guild chat when you die, fitting how you died: a fall, lava, your role in a dungeon,
   a mob way above your level or a gray one. Die the same way again and it gets worse.
   The "Guild chat" button has three settings: **No BG** (default), **Off** and **On**
+- Special lines for milestones (your 100th death!), dying together, a mob on a killing spree, the end of a
+  clean streak, dying right after a level-up and being one-shot, plus jokes for every class
+- Last week's awards in guild chat after the weekly reset: Death of the week, Floor Inspector, Deadliest foe
 - One summary in guild chat per boss fight instead of a line per death
+- Auto repair at merchants (on by default) and a Repairs board: who pays the biggest repair bills
+- Optional sound when a guildie dies: the human death scream, male or female
 - Only shows players who are in the guild now
 
 Open it with `/omen` or the minimap button.

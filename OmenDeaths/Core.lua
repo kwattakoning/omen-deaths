@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 _G.OmenDeaths = ns
 
-ns.VERSION = "0.8.9"
+ns.VERSION = "0.9.0"
 -- The version told to the guild. A test copy (tools/deploy.ps1) sets ns.ANNOUNCE to the version on
 -- GitHub at the end of this file, so guildies are not told to update to a version they cannot
 -- download yet (08-11-2026). Unset = ns.VERSION.
@@ -126,7 +126,7 @@ end)
 ---------------------------------------------------------------------------
 -- guildChatBG: also post deaths in battlegrounds and arenas (off by default, wish of a guildie
 -- 08-11-2026: a battleground gives many deaths and fills guild chat)
-local DEFAULT_SETTINGS = { toast = true, chat = true, guildChat = true, guildChatBG = false, minimapAngle = 200 }
+local DEFAULT_SETTINGS = { toast = true, chat = true, guildChat = true, guildChatBG = false, sound = false, autoRepair = true, minimapAngle = 200 }
 
 ns.On("ADDON_LOADED", function(name)
     if name ~= ADDON then return end

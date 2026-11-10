@@ -12,6 +12,14 @@ and makes fun of every death in guild chat.
  1. INSTALLING
 ---------------------------------------------------------------------
 
+ EASIEST: THE CURSEFORGE APP
+   Open the CurseForge app, pick World of Warcraft and then "Forever",
+   search for "Omen Deaths" and click Install. The app keeps it up to
+   date for you. Then go to step 4.
+   https://www.curseforge.com/wow/addons/omendeaths
+
+ BY HAND:
+
  1. Close World of Warcraft completely.
 
  2. Unzip the download. You get a folder called "OmenDeaths".
@@ -41,12 +49,17 @@ and makes fun of every death in guild chat.
     minimap. That's it!
 
  Updating: when a guildie runs a newer version, the addon tells you in
- chat and in orange under the title of its window. The newest version is
- always at
+ chat and in orange under the title of its window. With the CurseForge
+ app: let the app update it, then restart the game. By hand: the newest
+ version is always at
    https://github.com/kwattakoning/omen-deaths/releases/latest/download/OmenDeaths.zip
  Close WoW, delete the old OmenDeaths folder, put the new
  one in its place. Your saved deaths are not in this folder, so you
  keep them.
+
+ Switching from the GitHub download to CurseForge: just install it in
+ the CurseForge app; it replaces the old folder. Your deaths are not in
+ that folder, so you keep them.
 
  Uninstalling: close WoW and delete the OmenDeaths folder.
 
@@ -101,6 +114,9 @@ and makes fun of every death in guild chat.
                 "Unknown causes" = the game didn't tell us the killer.
                 "Before Omen Deaths" = deaths from the game's statistic,
                 from before the addon was installed (no killer known).
+   Repairs      who pays the biggest repair bills (gold spent on
+                repairs at a merchant). The button at the top right
+                switches Auto repair on and off.
    Health       how the addon is doing for every guildie who runs it:
                 their version ("old" = time to update), deaths the game
                 gave no cause for, and errors in the addon. Hover a row
@@ -128,6 +144,10 @@ and makes fun of every death in guild chat.
  4. THE BUTTONS AT THE BOTTOM
 ---------------------------------------------------------------------
 
+ Sound: On/Off   (Off by default)
+   The human death scream (male or female, like who died) when a
+   guildie dies. Only you hear it.
+
  Popup: On/Off
    A banner at the top of your screen when a guildie (or you) dies,
    with a funny line, the killer, the place and the death count of the
@@ -147,13 +167,27 @@ and makes fun of every death in guild chat.
      Elwynn Forest. Deaths this week: 3
 
    The line fits how you died: falling, drowning, lava, a dungeon, a
-   raid boss, a battleground, a mob in the open world...
+   raid boss, a battleground, a mob in the open world, your class...
+   And some deaths are special: your 10th, 25th, 50th, 100th (and every
+   100 after), dying together with a guildie, a mob that already got
+   another guildie today, the same death again and again, your first
+   death in more than 3 days, dying right after a level-up, or being
+   one-shot from full health.
 
    Click the button to go through the three settings:
      No BG = posts, but not for deaths in battlegrounds and arenas
      Off   = never posts
      On    = posts everywhere, battlegrounds too
    Only the person who died posts it, so there are no double lines.
+
+
+---------------------------------------------------------------------
+ WEEKLY AWARDS
+---------------------------------------------------------------------
+
+ After the weekly reset one guildie's addon posts last week's awards
+ in guild chat: Death of the week, Floor Inspector (most falls) and
+ Deadliest foe. Once per week for the whole guild.
 
 
 ---------------------------------------------------------------------
@@ -188,6 +222,11 @@ and makes fun of every death in guild chat.
  My numbers differ between "All Time" and "This Month".
    That's normal: All Time includes the game's lifetime statistic,
    the other tabs only count deaths seen since the addon was installed.
+
+ Does the addon spend my gold?
+   Only on repairs: when you open a merchant who can repair, it repairs
+   all your gear (the guild pays when it lets you). You see the cost in
+   your chat. Switch it off in the Repairs view or type /omen repair.
 
  Can I turn the guild chat messages off?
    Yes: click the "Guild chat" button in the window until it says "Off".
