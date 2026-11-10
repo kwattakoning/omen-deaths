@@ -6,8 +6,10 @@ the guild and posts a funny line in guild chat for every death.
 
 ## Download
 
-### [⬇ Download the newest version (OmenDeaths.zip)](https://github.com/kwattakoning/omen-deaths/releases/latest/download/OmenDeaths.zip)
+**Easiest: [Omen Deaths on CurseForge](https://www.curseforge.com/wow/addons/omendeaths).**
+Install it in the CurseForge app (World of Warcraft → Forever) and updates go automatically.
 
+Or by hand: [⬇ Download the newest version (OmenDeaths.zip)](https://github.com/kwattakoning/omen-deaths/releases/latest/download/OmenDeaths.zip)
 This link always gives the newest version. The addon tells you in-game when a new one is out.
 
 ## What it does
@@ -27,6 +29,10 @@ Open it with `/omen` or the minimap button.
 
 ## Install
 
+With the CurseForge app: pick World of Warcraft, then **Forever**, search for *Omen Deaths* and click Install.
+
+By hand:
+
 1. Close World of Warcraft.
 2. Unzip the download. You get one folder called `OmenDeaths`.
 3. Put that folder in `World of Warcraft\_forever_\Interface\AddOns\`.
@@ -36,6 +42,11 @@ Open it with `/omen` or the minimap button.
 Updating works the same way: delete the old `OmenDeaths` folder and put the new one in its place,
 then restart the game (a /reload is not always enough).
 Your deaths are saved elsewhere, so you keep them.
+
+### Switching from the GitHub download to CurseForge
+
+Just install it in the CurseForge app; it replaces the old folder. Your deaths are saved elsewhere,
+so you keep them. From then on the app keeps it up to date.
 
 More help: `HOW-TO-INSTALL.txt` inside the zip.
 
