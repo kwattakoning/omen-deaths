@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.2
+- Every place on the board now has its own title, from "Spirit Healer's Favourite" for the most deaths to "Immortal (So Far)" for the fewest (100 titles)
+
 ## 0.9.1
 - Repairs board: amounts now show with coin icons like the game does ("14s" looked like "148" gold)
 - Fixed a measurement on your own PC that counted logging in as coming back from your last death

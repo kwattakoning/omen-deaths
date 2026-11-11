@@ -22,19 +22,41 @@ local QUIPS = {
     "Stand in the fire, climb the board.",
     "Keep calm and release spirit.",
 }
-local TOP_TITLES = { "Spirit Healer's Favourite", "Professional Corpse Runner", "Repair Bill Champion" }
-local TITLES = {
-    "Floor Inspector", "Gravity Tester", "Pull Enthusiast", "Lava Swimmer", "Aggro Magnet",
-    "Ankh Collector", "Durability Destroyer", "Fall Damage Researcher", "Brave (Briefly)",
-    "Leeroy's Apprentice", "Graveyard Regular", "Part-time Ghost",
+-- One title per place, from the most deaths (1) to the fewest (100) (0.9.2, wish of the user: no two
+-- players with the same title, bad to less bad, a list for 100 players).
+UI.TITLES = {
+    "Spirit Healer's Favourite", "Professional Corpse Runner", "Repair Bill Champion", "Graveyard Mayor",
+    "Permanent Ghost", "Soulstone Addict", "Wipe Specialist", "Leeroy's Heir", "Bane of Durability",
+    "Corpse Run Veteran",
+    "Graveyard Regular", "Part-time Ghost", "Leeroy's Apprentice", "Durability Destroyer", "Lava Swimmer",
+    "Aggro Magnet", "Spirit Healer's Pen Pal", "Ankh Collector", "Fall Damage Researcher", "Floor Inspector",
+    "Gravity Tester", "Pull Enthusiast", "Fire Stander", "Murloc Snack", "Bear Food", "Raptor Chow",
+    "Elite Mob Fan", "Patrol Magnet", "Ledge Jumper", "Deep Water Explorer",
+    "Fatigue Swimmer", "Gnoll Chew Toy", "Kobold Punching Bag", "Defias Target Practice", "Wolf Pack Dinner",
+    "Rare Spawn Victim", "Overpuller", "Add Collector", "Res Sickness Regular", "Bandage Hoarder",
+    "Hearthstone Runner", "Wrong Way Explorer", "Brave (Briefly)", "Bold Before Thinking",
+    "Health Bar Optimist", "Potion Forgetter", "Out-of-Mana Victim", "Last-Second Panicker",
+    "Feign Death Wannabe", "Halfway Hero",
+    "Sometimes Squishy", "Paper Armor Wearer", "Accidental Tank", "Weekend Wiper", "Casual Corpse",
+    "Occasional Ghost", "Spirit Healer Acquaintance", "Durability Dabbler", "Repair Tourist",
+    "Graveyard Visitor",
+    "Graveyard Passer-By", "Mildly Mortal", "Fairly Fragile", "Careful-ish", "Cautious Puller",
+    "Bandage Believer", "Health Watcher", "Line-of-Sight Learner", "Respectful of Elites", "Patrol Spotter",
+    "Escape Artist", "Quick Retreater", "Run-Away Expert", "Cliff Avoider", "Fire Dodger", "Lava Respecter",
+    "Mostly Careful", "Rarely Reckless", "Surprisingly Sturdy", "Thick-Skinned",
+    "Hard to Kill", "Stubborn Survivor", "Mob Disappointer", "Spirit Healer's Stranger", "Seldom Seen Ghost",
+    "Durability Saver", "Repair-Free Wanderer", "Mostly Alive", "Barely Scratched", "Battle-Hardened",
+    "Unshaken", "Iron Will", "Death's Rare Guest", "Nearly Untouchable", "Living Legend", "Death Dodger",
+    "Grim Reaper's Nemesis", "Too Stubborn to Die", "Almost Immortal", "Immortal (So Far)",
 }
 
--- Same name, same title: a title should not jump around between refreshes.
-function UI.Title(name, rank)
-    if TOP_TITLES[rank] then return TOP_TITLES[rank] end
-    local h = 0
-    for i = 1, #name do h = (h * 31 + name:byte(i)) % 1000003 end
-    return TITLES[h % #TITLES + 1]
+-- Spread over the list: #1 gets the first title, the last place the last one, the rest evenly in
+-- between. Up to 100 players every place has its own title (user's choice A, 11-11-2026).
+function UI.Title(rank, total)
+    local n = #UI.TITLES
+    total = math.max(total or rank, rank)
+    if total <= 1 then return UI.TITLES[1] end
+    return UI.TITLES[1 + math.floor((rank - 1) * (n - 1) / (total - 1))]
 end
 
 function UI.Ago(t, now)
@@ -384,7 +406,7 @@ end
 local function PlayerTooltip(row)
     local d, now = row.data, ns.Now()
     GameTooltip:SetText(Colored(d.name, ns.ClassColor(d.class)))
-    GameTooltip:AddLine(UI.Title(d.name, row.rankNumber), GOLD[1], GOLD[2], GOLD[3])
+    GameTooltip:AddLine(UI.Title(row.rankNumber, UI.list and #UI.list), GOLD[1], GOLD[2], GOLD[3])
     GameTooltip:AddLine(" ")
     GameTooltip:AddDoubleLine("Deaths", d.count, 0.8, 0.8, 0.8, 1, 1, 1)
     if d.fromStats then
@@ -547,7 +569,7 @@ function UI.Refresh()
                 row.icon:SetTexture(ns.ClassIcon(d.class))
                 row.name:SetText(d.name)
                 row.name:SetTextColor(ns.ClassColor(d.class))
-                row.sub:SetText(UI.Title(d.name, n))
+                row.sub:SetText(UI.Title(n, #list))
             end
         end
     end

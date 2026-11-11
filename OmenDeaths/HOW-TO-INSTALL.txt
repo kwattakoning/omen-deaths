@@ -108,8 +108,9 @@ and makes fun of every death in guild chat.
 
  VIEWS
    The Fallen   players, most deaths first. Gold, silver and bronze for
-                the top 3, and everyone gets a (not so) honorary title,
-                like "Spirit Healer's Favourite" or "Floor Inspector".
+                the top 3, and every place gets its own (not so) honorary
+                title: from "Spirit Healer's Favourite" for the most deaths
+                down to "Immortal (So Far)" for the fewest.
    Killers      what killed us the most: mobs, bosses, falling, lava...
                 "Unknown causes" = the game didn't tell us the killer.
                 "Before Omen Deaths" = deaths from the game's statistic,
