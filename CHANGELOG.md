@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3
+- Death sound is much louder: it now plays on your Master volume, three times at once
+- A popup tells you when a newer version is out (the chat line was easy to miss)
+
 ## 0.9.2
 - Every place on the board now has its own title, from "Spirit Healer's Favourite" for the most deaths to "Immortal (So Far)" for the fewest (100 titles)
 

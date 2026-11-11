@@ -313,10 +313,37 @@ end
 -- Unknown gender (older versions do not send it): male, the user's pick.
 Toast.SOUND_MALE, Toast.SOUND_FEMALE = 2944, 2940
 Toast.SOUND_FALLBACK = 847 -- SOUNDKIT.IG_QUEST_FAILED, if the client cannot play the scream
+-- On the Master channel (0.9.3): on Effects it was too soft to notice while playing (user, 11-11-2026).
+-- An addon cannot play one sound louder than its channel; Master is usually the loudest one.
+Toast.CHANNEL = "Master"
+-- 3 times at once (0.9.3): no volume per sound in the API, copies add up. Picked by ear out of 1-3,
+-- "no echo" (user, 12-11-2026).
+Toast.TIMES = 3
 function Toast.Sound(gender)
     if not PlaySound then return end
-    local ok, willPlay = pcall(PlaySound, gender == "f" and Toast.SOUND_FEMALE or Toast.SOUND_MALE)
-    if not ok or willPlay == false then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_QUEST_FAILED or Toast.SOUND_FALLBACK) end
+    local id = gender == "f" and Toast.SOUND_FEMALE or Toast.SOUND_MALE
+    local ok, willPlay = pcall(PlaySound, id, Toast.CHANNEL)
+    if not ok or willPlay == false then id = SOUNDKIT and SOUNDKIT.IG_QUEST_FAILED or Toast.SOUND_FALLBACK
+        pcall(PlaySound, id, Toast.CHANNEL) end
+    for _ = 2, Toast.TIMES do pcall(PlaySound, id, Toast.CHANNEL) end
+end
+
+local function Show(title, line)
+    if not frame then Build() end
+    frame.title:SetText(title)
+    frame.line:SetText(line)
+    frame.started = GetTime()
+    frame:SetAlpha(1)
+    Toast.Anchor()
+    frame:Show()
+end
+
+-- A guildie runs a newer version (0.9.3): the same popup as a death, once per newer version heard.
+-- The chat line alone was easy to miss: 10 of 13 guildies on an older version (Health, 11-11-2026).
+function Toast.Update(version)
+    if not ns.db or not ns.db.settings.toast then return end
+    Show("Update available: Omen Deaths " .. version,
+        "You have " .. ns.VERSION .. " · Update via CurseForge, then restart")
 end
 
 function Toast.Death(owner, rec)
@@ -336,13 +363,5 @@ function Toast.Death(owner, rec)
         local text = mine and headline or ns.Lines.Render(template, ns.Colored(owner, ns.ClassColor(rec.c)), rec.k, n)
         ns.Print(text .. (detail ~= "" and (" — " .. detail) or ""))
     end
-    if ns.db.settings.toast then
-        if not frame then Build() end
-        frame.title:SetText(headline)
-        frame.line:SetText(detail)
-        frame.started = GetTime()
-        frame:SetAlpha(1)
-        Toast.Anchor()
-        frame:Show()
-    end
+    if ns.db.settings.toast then Show(headline, detail) end
 end

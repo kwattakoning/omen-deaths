@@ -48,8 +48,8 @@ and makes fun of every death in guild chat.
  5. Log in. You'll see a little round button with the Omen tree on the edge of your
     minimap. That's it!
 
- Updating: when a guildie runs a newer version, the addon tells you in
- chat and in orange under the title of its window. With the CurseForge
+ Updating: when a guildie runs a newer version, the addon tells you with
+ a popup, in chat and in orange under the title of its window. With the CurseForge
  app: let the app update it, then restart the game. By hand: the newest
  version is always at
    https://github.com/kwattakoning/omen-deaths/releases/latest/download/OmenDeaths.zip
@@ -147,7 +147,9 @@ and makes fun of every death in guild chat.
 
  Sound: On/Off   (Off by default)
    The human death scream (male or female, like who died) when a
-   guildie dies. Only you hear it.
+   guildie dies. Only you hear it. It plays on your Master volume, and
+   only while WoW is in front (unless "Sound in Background" is on in
+   the game's Sound settings).
 
  Popup: On/Off
    A banner at the top of your screen when a guildie (or you) dies,

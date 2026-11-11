@@ -355,6 +355,7 @@ local function Seen(sender, version)
     if version and Comm.Newer(version, Comm.newest or ns.VERSION) then
         Comm.newest = version
         ns.Print("|cffff9900" .. Comm.UpdateText() .. "|r")
+        if ns.Toast then ns.Toast.Update(version) end
         ns.Changed()
     end
 end
