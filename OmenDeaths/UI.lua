@@ -10,7 +10,6 @@ local CRIMSON = { 0.77, 0.12, 0.23 }
 local SKULL = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8"
 local BONE = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
-local COIN = "Interface\\MoneyFrame\\UI-GoldIcon"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MORPHEUS = "Fonts\\MORPHEUS.TTF"
 
@@ -525,8 +524,9 @@ function UI.Refresh()
             else
                 row.rank:SetTextColor(0.6, 0.6, 0.6)
             end
-            row.count:SetText(repairs and ns.Repair.Short(d.count) or d.count)
-            row.skull:SetTexture(repairs and COIN or SKULL)
+            row.count:SetText(repairs and ns.Repair.Coins(d.count) or d.count)
+            -- the coins are in the number itself: no skull next to it
+            if repairs then row.skull:Hide() else row.skull:Show() end
             row.bar:SetWidth(math.max(1, 412 * d.count / top))
             if repairs then
                 row.icon:SetTexture(ns.ClassIcon(d.class))

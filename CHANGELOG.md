@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1
+- Repairs board: amounts now show with coin icons like the game does ("14s" looked like "148" gold)
+- Fixed a measurement on your own PC that counted logging in as coming back from your last death
+
 ## 0.9.0
 - **New lines for special deaths:** your 10th, 25th, 50th, 100th death and every 100 after that; dying together with a guildie in the same fight; a mob that already killed another guildie today; your first death in more than 3 days; dying right after a level-up; being one-shot from full health
 - **Class lines:** every class gets its own jokes ("Kwatta's bubble was on cooldown vs Hogger")

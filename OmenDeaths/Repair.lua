@@ -29,7 +29,24 @@ function Repair.Money(copper)
     return table.concat(parts, " ")
 end
 
--- Short, for the number column: only the biggest coin ("12g", "34s", "56c").
+-- For the number column, as the game shows money: a coin icon after each number, the two biggest
+-- coins only (fits the column). 0.9.0 showed "14s" in the window's font next to a gold coin, which
+-- read as "148" gold (user, 10-11-2026).
+Repair.ICONS = { g = "Interface\\MoneyFrame\\UI-GoldIcon", s = "Interface\\MoneyFrame\\UI-SilverIcon",
+    c = "Interface\\MoneyFrame\\UI-CopperIcon" }
+function Repair.Coins(copper)
+    copper = math.floor(copper or 0)
+    local parts = { { "g", math.floor(copper / 10000) }, { "s", math.floor(copper / 100) % 100 }, { "c", copper % 100 } }
+    local first = 3
+    for i = 1, 3 do if parts[i][2] > 0 then first = i break end end
+    local out = {}
+    for i = first, math.min(first + 1, 3) do
+        out[#out + 1] = parts[i][2] .. "|T" .. Repair.ICONS[parts[i][1]] .. ":0:0:2:0|t"
+    end
+    return table.concat(out, " ")
+end
+
+-- Short, as text: only the biggest coin ("12g", "34s", "56c").
 function Repair.Short(copper)
     copper = math.floor(copper or 0)
     if copper >= 10000 then return math.floor(copper / 10000) .. "g" end

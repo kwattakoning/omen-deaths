@@ -336,6 +336,7 @@ function Death.Record()
     log[#log + 1] = entry
     while #log > Death.LOG_KEEP do table.remove(log, 1) end
     pending.log = entry
+    Death.diedHere = entry -- the coming-back measurement only counts deaths of this session
     -- which functions the two APIs have in this client: shows other ways to the recap
     ns.db.recapApi = { meter = Names(C_DamageMeter), recap = Names(C_DeathRecap), version = ns.VERSION }
     TryKiller(false, "death") -- usually known at once; then the guild hears it with the killer
@@ -376,9 +377,10 @@ local function Sick()
     if ns.IsSecret(aura) then return "secret" end
     return aura and "yes" or "no"
 end
+-- Only a death of this session: at login the game also says "alive", which in 0.9.0 was noted as
+-- coming back 82433 s (23 h) after the death of the day before (check-data.js, 11-11-2026).
 local function NoteBack(event)
-    local log = ns.db and ns.db.recapLog
-    local e = log and log[#log]
+    local e = Death.diedHere
     if not e or e.back then return end
     local now = ns.Now()
     e.back = { event = event, after = now - e.t, ghost = tostring(ns.Call(UnitIsGhost, "player")),
