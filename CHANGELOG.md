@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.4
+- Battlegrounds and arenas no longer spam guild chat: those deaths are never posted, and a guildie's death there gives no popup, sound or chat line. They still count on the board under Battlegrounds
+- The Guild chat button is now simply On / Off (the "On, battlegrounds too" setting is gone)
+
 ## 0.9.3
 - Death sound is much louder: it now plays on your Master volume, three times at once
 - A popup tells you when a newer version is out (the chat line was easy to miss)

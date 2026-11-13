@@ -162,7 +162,7 @@ and makes fun of every death in guild chat.
    (With "Guild chat" on as well, you may see a death twice. Switch
    this one off if that bothers you.)
 
- Guild chat: No BG / Off / On   (No BG by default)
+ Guild chat: On / Off   (On by default)
    When YOU die, the addon posts one funny line in guild chat, so the
    whole guild can laugh, also those without the addon. For example:
 
@@ -170,18 +170,19 @@ and makes fun of every death in guild chat.
      Elwynn Forest. Deaths this week: 3
 
    The line fits how you died: falling, drowning, lava, a dungeon, a
-   raid boss, a battleground, a mob in the open world, your class...
+   raid boss, a mob in the open world, your class...
    And some deaths are special: your 10th, 25th, 50th, 100th (and every
    100 after), dying together with a guildie, a mob that already got
    another guildie today, the same death again and again, your first
    death in more than 3 days, dying right after a level-up, or being
    one-shot from full health.
 
-   Click the button to go through the three settings:
-     No BG = posts, but not for deaths in battlegrounds and arenas
-     Off   = never posts
-     On    = posts everywhere, battlegrounds too
+   Click the button to switch it On or Off.
    Only the person who died posts it, so there are no double lines.
+
+   Battlegrounds and arenas: deaths there are never posted in guild
+   chat, and a guildie's death there gives no popup, sound or chat
+   line. They are still counted: pick "Battlegrounds" on the board.
 
 
 ---------------------------------------------------------------------

@@ -62,7 +62,7 @@ end
 
 -- The guild chat result in words, for the tooltip.
 Health.POST_TEXT = {
-    sent = "sent", off = "not sent: Guild chat is Off", bg = "not sent: battleground (No BG)",
+    sent = "sent", off = "not sent: Guild chat is Off", bg = "not sent: battleground",
     boss = "not sent: counted as a boss fight", wait = "waiting: the game holds chat back",
     queued = "about to be sent", click = "waiting for a click (the line goes at the next click)", err = "failed: the game refused it (see latest error)",
     noguild = "not sent: not in a guild", sent = "sent, not seen in guild chat yet",

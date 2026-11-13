@@ -21,7 +21,8 @@ This link always gives the newest version. The addon tells you in-game when a ne
 - Killers: which mobs (and falls) kill us the most
 - A funny line in guild chat when you die, fitting how you died: a fall, lava, your role in a dungeon,
   a mob way above your level or a gray one. Die the same way again and it gets worse.
-  The "Guild chat" button has three settings: **No BG** (default), **Off** and **On**
+  The "Guild chat" button switches it **On** (default) or **Off**. Battleground and arena deaths are never posted
+  (and give no popup or sound), but they still count under Battlegrounds
 - Special lines for milestones (your 100th death!), dying together, a mob on a killing spree, the end of a
   clean streak, dying right after a level-up and being one-shot, plus jokes for every class
 - Last week's awards in guild chat after the weekly reset: Death of the week, Floor Inspector, Deadliest foe

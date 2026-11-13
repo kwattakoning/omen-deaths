@@ -326,17 +326,11 @@ local function Build()
     foot2:SetJustifyH("LEFT")
     frame.foot2 = foot2
 
-    -- three steps: On -> No BG -> Off -> On
+    -- On / Off (0.9.4: the step "On, battlegrounds too" is gone; battlegrounds never post)
     local guild = Button(frame, "", 128)
     guild:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -22, 18)
     guild:SetScript("OnClick", function()
-        if not state.guildChat then
-            state.guildChat, state.guildChatBG = true, true
-        elseif state.guildChatBG then
-            state.guildChatBG = false
-        else
-            state.guildChat = false
-        end
+        state.guildChat = not state.guildChat
         UI.Refresh()
     end)
     guild:SetScript("OnEnter", function(self)
@@ -344,7 +338,7 @@ local function Build()
         GameTooltip:SetText("Guild chat")
         GameTooltip:AddLine("When you die, post a funny line in guild chat.", 1, 1, 1)
         GameTooltip:AddLine("Everyone in the guild sees it, also without the addon.", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("No BG: not for deaths in battlegrounds and arenas.", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Never for deaths in battlegrounds and arenas.", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
     guild:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -611,7 +605,7 @@ function UI.Refresh()
     end
     frame.foot2:SetText(("You: %s  ·  %d %s online with Omen Deaths"):format(mine, online, online == 1 and "guildie" or "guildies"))
 
-    frame.guildButton:SetText("Guild chat: " .. (not state.guildChat and "Off" or state.guildChatBG and "On" or "No BG"))
+    frame.guildButton:SetText("Guild chat: " .. (state.guildChat and "On" or "Off"))
     frame.chatButton:SetText("My chat: " .. (state.chat and "On" or "Off"))
     frame.bannerButton:SetText("Popup: " .. (state.toast and "On" or "Off"))
     frame.soundButton:SetText("Sound: " .. (state.sound and "On" or "Off"))

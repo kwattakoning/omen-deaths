@@ -32,7 +32,7 @@ local function Locked()
 end
 
 -- How the guild chat line of my latest death went, for the Health report (08-11-2026: a guildie's
--- death got no line and nothing showed why). One word: off, bg (No BG), boss (counted as a boss
+-- death got no line and nothing showed why). One word: off, bg (battleground: never posted), boss (counted as a boss
 -- fight), wait (the game holds chat back), queued, click (waits for my next click), err (the game
 -- refused it), noguild, sent (not seen back yet), arrived (seen back in guild chat), lost (not back
 -- by the time I was alive again: next lines go at a click). Up to 0.8.6 also retried (a second try;
@@ -207,6 +207,8 @@ function Toast.Post(line, mine)
     poster:Show()
 end
 
+function Toast.IsBG(rec) return rec.it == "pvp" or rec.it == "arena" end
+
 function Toast.GuildPost(owner, t)
     if not ns.db or owner ~= ns.MyName() then return end
     if not ns.db.settings.guildChat then return Toast.Note("off") end
@@ -214,7 +216,9 @@ function Toast.GuildPost(owner, t)
     local p = ns.Book().players[owner]
     local rec = p and p.deaths[t]
     if not rec then return end
-    if (rec.it == "pvp" or rec.it == "arena") and not ns.db.settings.guildChatBG then return Toast.Note("bg") end
+    -- battlegrounds and arenas: never (0.9.4). Up to 0.9.3 a button step "On" posted them, and the
+    -- step after "Off" was "On": a guildie flooded guild chat from a battleground (13-11-2026).
+    if Toast.IsBG(rec) then return Toast.Note("bg") end
     -- died in a boss fight: the summary after the fight covers it (Wipe.lua)
     if ns.Wipe and ns.Wipe.Covers(rec) then return Toast.Note("boss") end
     Toast.Post(Toast.GuildLine(owner, rec), true)
@@ -349,6 +353,9 @@ end
 function Toast.Death(owner, rec)
     if not ns.db or not rec then return end
     local mine = owner == ns.MyName()
+    -- a guildie's death in a battleground or arena: no popup, sound or chat line (0.9.4, user's
+    -- choice: a battleground gives many deaths). Still counted, under Battlegrounds.
+    if not mine and Toast.IsBG(rec) then return end
     if not mine and ns.db.settings.sound then Toast.Sound(rec.g) end
     local headline, named, template, n
     if mine then
