@@ -51,6 +51,8 @@ local function Seen(v)
     return t
 end
 
+Death.Seen = Seen -- also for the measurements in Probe.lua
+
 -- The names of the functions an API table has, sorted; nil when the table is missing.
 local function Names(api)
     if type(api) ~= "table" then return nil end

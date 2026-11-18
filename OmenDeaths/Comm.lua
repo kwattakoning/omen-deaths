@@ -95,18 +95,22 @@ local function Text(s) if s ~= nil and s ~= "" then return s end end
 -- Health report. The error text gets what is left of MAX_LEN after the other fields:
 -- "H" 1 + name 25 + version 10 + logged 2 + missed 2 + step 8 + errors 6 + post 12 + 8 separators = 74.
 -- post ("arrived/0.50") comes last: older versions read 8 fields and leave it.
+-- 0.9.5: field 10 = the post log (Toast.PostLogText, "d35w12c,d35"), HEALTH_LOG_LEN bytes plus a
+-- separator; older versions read 9 fields and leave it. The error text gets that much less.
 Comm.HEALTH_POST_LEN = 12
-Comm.HEALTH_TEXT_LEN = Comm.MAX_LEN - 74
+Comm.HEALTH_LOG_LEN = 40
+Comm.HEALTH_TEXT_LEN = Comm.MAX_LEN - 74 - 1 - Comm.HEALTH_LOG_LEN
 function Comm.EncodeHealth(owner, h)
     return table.concat({ "H", Clean(owner, Comm.NAME_LEN), Clean(h.v, 10), tostring(h.n or 0), tostring(h.miss or 0),
-        Clean(h.step, 8), tostring(h.err or 0), Clean(h.text, Comm.HEALTH_TEXT_LEN), Clean(h.post, Comm.HEALTH_POST_LEN) }, "|")
+        Clean(h.step, 8), tostring(h.err or 0), Clean(h.text, Comm.HEALTH_TEXT_LEN), Clean(h.post, Comm.HEALTH_POST_LEN),
+        Clean(h.log, Comm.HEALTH_LOG_LEN) }, "|")
 end
 
 function Comm.DecodeHealth(msg)
     local p = Split(msg)
     if p[1] ~= "H" or #p < 8 or not Text(p[2]) then return nil end
     return p[2], { v = Text(p[3]), n = tonumber(p[4]) or 0, miss = tonumber(p[5]) or 0, step = Text(p[6]),
-        err = tonumber(p[7]) or 0, text = Text(p[8]), post = Text(p[9]) }
+        err = tonumber(p[7]) or 0, text = Text(p[8]), post = Text(p[9]), log = Text(p[10]) }
 end
 
 function Comm.DecodeRecord(msg)
@@ -132,31 +136,43 @@ function Comm.EncodeVector(book)
         if count > 0 or statAt > 0 then entries[#entries + 1] = name .. "=" .. count .. ":" .. latest .. ":" .. statAt end
     end
     table.sort(entries)
-    local msgs, cur = {}, "V|"
+    -- Each part ends with ",#k/n" (part k of n, 0.9.5), so the receiver knows when it has the whole
+    -- list. Room kept for it: "," + "#" + "/" + twice the digits of n (n <= number of entries).
+    local reserve = 3 + 2 * #tostring(math.max(1, #entries))
+    local parts, cur = {}, "V|"
     for _, e in ipairs(entries) do
         local add = (cur == "V|" and "" or ",") .. e
-        if #cur + #add > Comm.MAX_LEN then
-            msgs[#msgs + 1] = cur
+        if #cur + #add + reserve > Comm.MAX_LEN then
+            parts[#parts + 1] = cur
             cur = "V|" .. e
         else
             cur = cur .. add
         end
     end
-    msgs[#msgs + 1] = cur
+    parts[#parts + 1] = cur
+    local msgs = {}
+    for k, part in ipairs(parts) do
+        msgs[k] = part .. (part == "V|" and "" or ",") .. "#" .. k .. "/" .. #parts
+    end
     return msgs
 end
 
+-- Returns the entries, and for a 0.9.5+ sender the part number and the number of parts.
+-- Older versions skip the "#k/n" entry: it does not match an entry.
 function Comm.DecodeVector(msg)
     local body = msg:match("^V|(.*)$")
     if not body then return nil end
-    local v = {}
+    local v, k, n = {}, nil, nil
     for entry in body:gmatch("[^,]+") do
         local name, count, latest, statAt = entry:match("^([^=]+)=(%d+):(%d+):?(%d*)$")
         if name then
             v[name] = { count = tonumber(count), latest = tonumber(latest), statAt = tonumber(statAt) or 0 }
+        else
+            local pk, pn = entry:match("^#(%d+)/(%d+)$")
+            if pk then k, n = tonumber(pk), tonumber(pn) end
         end
     end
-    return v
+    return v, k, n
 end
 
 ---------------------------------------------------------------------------
@@ -221,32 +237,32 @@ pacer:SetScript("OnUpdate", function()
     local now = GetTime()
     budget = math.min(Comm.BURST, budget + (now - (lastTick or now)) * Comm.CPS)
     lastTick = now
-    local i = 1
-    while queue[i] do
-        local item = queue[i]
-        if (item.notBefore or 0) > now then
-            i = i + 1
+    -- One pass that keeps what still has to go, in order (0.9.5). table.remove per item shifted the
+    -- whole queue each time: with thousands of items that was heavy for one frame.
+    local kept, stop = {}, false
+    for _, item in ipairs(queue) do
+        if stop or (item.notBefore or 0) > now then
+            kept[#kept + 1] = item
         else
             local msg = Build(item)
-            if not msg then
-                table.remove(queue, i)
-            else
+            if msg then
                 local cost = #msg + Comm.OVERHEAD
-                if budget < cost then return end
-                local result = Raw(msg)
-                if result == "throttled" then
-                    budget = 0
-                    return
+                local result = budget >= cost and Raw(msg) or "wait"
+                if result == "wait" or result == "throttled" then
+                    if result == "throttled" then budget = 0 end
+                    stop = true
+                    kept[#kept + 1] = item
+                else
+                    budget = budget - cost
+                    echoes[msg] = (echoes[msg] or 0) + 1
+                    if item.record then heard[item.record.owner .. "/" .. item.record.t] = now end
+                    local sp = item.stat and ns.Book().players[item.stat.owner]
+                    if sp and sp.stat then heard["S/" .. item.stat.owner .. "/" .. sp.stat.at] = now end
                 end
-                budget = budget - cost
-                echoes[msg] = (echoes[msg] or 0) + 1
-                table.remove(queue, i)
-                if item.record then heard[item.record.owner .. "/" .. item.record.t] = now end
-                local sp = item.stat and ns.Book().players[item.stat.owner]
-                if sp and sp.stat then heard["S/" .. item.stat.owner .. "/" .. sp.stat.at] = now end
             end
         end
     end
+    queue = kept
     if not queue[1] then
         pacer:Hide()
         lastTick = nil
@@ -297,24 +313,61 @@ function Comm.SendVector()
     for _, msg in ipairs(Comm.EncodeVector(ns.Book())) do Push({ msg = msg }) end
 end
 
-local function OnVector(sender, v)
-    local book = ns.Book()
-    local names = {}
-    for name in pairs(book.players) do names[name] = true end
-    for name in pairs(v) do names[name] = true end
-    for name in pairs(names) do
-        local theirs = v[name] or { count = 0, latest = 0, statAt = 0 }
-        Comm.Answer(name, theirs.count, theirs.latest)
-        local p = book.players[name]
-        if p and p.stat and p.stat.at > (theirs.statAt or 0) then
-            Comm.SendStat(name, name ~= ns.MyName())
-        end
-        local count, latest = ns.Data.Summary(book, name)
-        if theirs.count > count or theirs.latest > latest then
-            Push({ need = { owner = name, count = theirs.count, latest = theirs.latest },
-                notBefore = GetTime() + math.random() * Comm.RELAY_JITTER })
-        end
+-- One player: what they hold of `name` against what I hold.
+local function Compare(book, name, theirs)
+    Comm.Answer(name, theirs.count, theirs.latest)
+    local p = book.players[name]
+    if p and p.stat and p.stat.at > (theirs.statAt or 0) then
+        Comm.SendStat(name, name ~= ns.MyName())
     end
+    local count, latest = ns.Data.Summary(book, name)
+    if theirs.count > count or theirs.latest > latest then
+        Push({ need = { owner = name, count = theirs.count, latest = theirs.latest },
+            notBefore = GetTime() + math.random() * Comm.RELAY_JITTER })
+    end
+end
+
+-- A V list comes in parts when it is long (Omen 18-11-2026: 48 players = 8 parts). Up to 0.9.4 every
+-- part was read as the whole list: everyone not in that part counted as "holds 0", so each login
+-- made every guildie queue all records again (measured: 4367 items, 742 needless R messages) and the
+-- game stuttered. Now a part only counts for the names in it. Players the sender lacks entirely are
+-- sent only once all n parts of a 0.9.5+ sender have arrived.
+local vectors = {} -- sender -> { names = {}, got, last }
+local function OnVector(sender, v, k, n)
+    local book = ns.Book()
+    local lo, hi
+    for name in pairs(v) do
+        local key = name .. "=" -- the sender sorted its entries "name=...", so compare like that
+        if not lo or key < lo then lo = key end
+        if not hi or key > hi then hi = key end
+    end
+    local st = vectors[sender]
+    local first
+    if k then
+        first = k == 1
+    else
+        -- older sender: a new list starts when this part does not follow the previous one
+        first = not st or not lo or not st.last or lo <= st.last
+    end
+    if first or not st then
+        st = { names = {}, got = 0 }
+        vectors[sender] = st
+    end
+    st.got, st.last = st.got + 1, hi
+    for name, theirs in pairs(v) do
+        st.names[name] = true
+        Compare(book, name, theirs)
+    end
+    if k and n and k == n then
+        if st.got == n then
+            for name in pairs(book.players) do
+                if not st.names[name] then Compare(book, name, { count = 0, latest = 0, statAt = 0 }) end
+            end
+        end
+        vectors[sender] = nil
+    end
+    if not first then return end
+    -- once per list, not once per part
     Push({ msg = "P|" .. ns.Announced() })
     local claim = Comm.UpdateClaim()
     if claim then Push({ msg = claim }) end
@@ -388,10 +441,10 @@ function Comm.OnMessage(prefix, msg, channel, sender)
             if ns.Data.SetStat(ns.Book(), owner, total, at, p[5], tonumber(p[6])) then ns.Changed() end
         end
     elseif kind == "V" then
-        local v = Comm.DecodeVector(msg)
+        local v, k, n = Comm.DecodeVector(msg)
         if v then
             Seen(sender)
-            OnVector(sender, v)
+            OnVector(sender, v, k, n)
         end
     elseif kind == "N" then
         local p = Split(msg)
@@ -499,7 +552,7 @@ function Comm.MaybeAnnounce()
     SeenVersion(book, ns.VERSION)
     if Comm.HadItBefore(ns.VERSION) then return end
     Comm.SendRaw("U|" .. ns.VERSION)
-    ns.Toast.Post(Comm.UpdateLine())
+    ns.Toast.Post(Comm.UpdateLine(), false, "u")
 end
 
 -- With my answer to a V: the newest version I know was posted.

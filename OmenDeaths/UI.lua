@@ -453,6 +453,12 @@ local function HealthTooltip(row)
         GameTooltip:AddLine("Guild chat, latest death: " .. text,
             bad and 1 or 0.85, bad and 0.6 or 0.85, bad and 0.2 or 0.85, true)
     end
+    local lines, burst = ns.Health.PostLog(h.log)
+    if lines and #lines > 0 then
+        GameTooltip:AddLine("Guild chat lines (newest first):", 1, 1, 1)
+        for _, l in ipairs(lines) do GameTooltip:AddLine("  " .. l, 0.85, 0.85, 0.85) end
+        if burst > 1 then GameTooltip:AddLine(burst .. " lines in the same second", 1, 0.6, 0.2) end
+    end
 end
 
 function UI.Tooltip(row)

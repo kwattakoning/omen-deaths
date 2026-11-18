@@ -90,6 +90,39 @@ local function Missed()
     Report()
 end
 
+-- Post log (0.9.5): every line this addon put in guild chat, newest last, in OmenDeathsDB.postLog.
+-- 13-11-2026 a guildie sent several lines at once and nothing showed what they were.
+-- Per line: t = server time, k = kind (d death, b boss summary, a awards, u new version),
+-- w = whole seconds it waited before going out (chat held back, or waiting for a click),
+-- c = sent at a click, x = the game refused it.
+-- KEEP 12: the most deaths of one guildie in one evening (Chrysi 13-11-2026, 12 in battlegrounds).
+Toast.POST_LOG_KEEP = 12
+function Toast.LogPost(kind, queued, ok, click)
+    local db = ns.db
+    if not db then return end
+    local log = type(db.postLog) == "table" and db.postLog or {}
+    db.postLog = log
+    log[#log + 1] = { t = ns.Now(), k = kind or "?", w = queued and math.floor(GetTime() - queued) or 0,
+        c = click or nil, x = not ok or nil }
+    while #log > Toast.POST_LOG_KEEP do table.remove(log, 1) end
+end
+
+-- The log for the Health report: "d35w12c,d35" = newest first, kind + seconds before `now`
+-- (+ w seconds waited, c at a click, x refused), as many as fit in maxLen bytes.
+function Toast.PostLogText(now, maxLen)
+    local log = ns.db and ns.db.postLog or {}
+    local parts, len = {}, 0
+    for i = #log, 1, -1 do
+        local e = log[i]
+        local s = tostring(e.k) .. math.max(0, now - (e.t or now))
+            .. ((e.w or 0) > 0 and ("w" .. e.w) or "") .. (e.c and "c" or "") .. (e.x and "x" or "")
+        local add = #s + (#parts > 0 and 1 or 0)
+        if len + add > maxLen then break end
+        parts[#parts + 1], len = s, len + add
+    end
+    if #parts > 0 then return table.concat(parts, ",") end
+end
+
 poster:SetScript("OnUpdate", function(self)
     if Locked() then return end
     while outbox[1] do
@@ -100,16 +133,20 @@ poster:SetScript("OnUpdate", function(self)
             -- the line before has not come back yet: it counts as lost
             Missed()
             if ns.db and ns.db.clickMode then
-                waiting = { msg = item.msg }
+                waiting = { msg = item.msg, queued = item.queued }
                 Toast.Note("click")
             else
                 local ok, err = Send(item.msg)
+                Toast.LogPost(item.kind, item.queued, ok)
                 waiting = ok and { msg = item.msg, at = GetTime(), auto = true } or nil
                 Toast.Note(ok and "sent" or "err", not ok and err or nil)
                 Report()
             end
         else
-            Send(item.msg)
+            local ok = Send(item.msg)
+            Toast.LogPost(item.kind, item.queued, ok)
+            -- boss summary, awards, new version: rare (a few per session), so the guild sees the log at once
+            Report()
         end
     end
     self:Hide()
@@ -144,6 +181,7 @@ function Toast.Click()
         return
     end
     local ok, err = Send(waiting.msg)
+    Toast.LogPost("d", waiting.queued, ok, true)
     if ok then
         waiting.at = GetTime()
         Toast.Note("sent")
@@ -201,8 +239,9 @@ function Toast.Fit(line)
 end
 
 -- Posts a line in guild chat as soon as chat is allowed. mine = the line of my own death.
-function Toast.Post(line, mine)
-    outbox[#outbox + 1] = { msg = Toast.Fit(line), mine = mine }
+-- kind for the post log: "d" death (default for mine), "b" boss summary, "a" awards, "u" new version.
+function Toast.Post(line, mine, kind)
+    outbox[#outbox + 1] = { msg = Toast.Fit(line), mine = mine, kind = kind or (mine and "d") or "?", queued = GetTime() }
     if mine then Toast.Note(Locked() and "wait" or "queued") end
     poster:Show()
 end

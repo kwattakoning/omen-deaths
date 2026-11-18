@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.5
+- Fixes game stutter when a guildie logs in: the addon no longer re-sends every death it knows each time someone logs in or reloads. Update helps you and your guild most when everyone has it
+- Behind the scenes only, nothing changes in your game: the addon keeps a short log of the lines it posts in guild chat (so a flood of lines can be explained), and measures what the game's damage meter and duels give, for future features (boss fights, duels)
+
 ## 0.9.4
 - Battlegrounds and arenas no longer spam guild chat: those deaths are never posted, and a guildie's death there gives no popup, sound or chat line. They still count on the board under Battlegrounds
 - The Guild chat button is now simply On / Off (the "On, battlegrounds too" setting is gone)

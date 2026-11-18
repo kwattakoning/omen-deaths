@@ -112,7 +112,7 @@ function Wipe.Summarize(f)
     if count == 0 then return end
     Wipe.HeardClaim(f.key)
     ns.Comm.SendRaw("W|" .. f.key)
-    ns.Toast.Post(Wipe.Line(f, names, count))
+    ns.Toast.Post(Wipe.Line(f, names, count), false, "b")
 end
 
 ns.On("ENCOUNTER_START", function(id, name)

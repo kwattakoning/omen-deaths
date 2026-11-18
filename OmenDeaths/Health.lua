@@ -26,7 +26,27 @@ function Health.Mine()
     local err = db.errors or {}
     local lp = db.lastPost
     local post = lp and lp.r and (lp.r .. (lp.echo and ("/" .. string.format("%.2f", lp.echo)) or ""))
-    return { v = ns.VERSION, n = #log, miss = missed, step = step, err = err.n or 0, text = err.text, post = post }
+    local posts = ns.Toast and ns.Toast.PostLogText and ns.Toast.PostLogText(ns.Now(), ns.Comm.HEALTH_LOG_LEN)
+    return { v = ns.VERSION, n = #log, miss = missed, step = step, err = err.n or 0, text = err.text, post = post, log = posts }
+end
+
+-- The post log of a report in words (0.9.5): newest first, plus the biggest number of lines that
+-- went out in the same second. "d35w12c" = death line 35 s before the report, waited 12 s, at a click.
+Health.KINDS = { d = "death", b = "boss summary", a = "awards", u = "new version" }
+function Health.PostLog(log)
+    if type(log) ~= "string" then return nil end
+    local lines, perSecond, burst = {}, {}, 0
+    for k, age, rest in log:gmatch("(%a)(%d+)([%a%d]*)") do
+        local w = rest:match("w(%d+)")
+        local text = (Health.KINDS[k] or k) .. ", " .. age .. " s before the report"
+        if w then text = text .. ", waited " .. w .. " s" end
+        if rest:find("c", 1, true) then text = text .. ", at a click" end
+        if rest:find("x", 1, true) then text = text .. ", REFUSED" end
+        lines[#lines + 1] = text
+        perSecond[age] = (perSecond[age] or 0) + 1
+        if perSecond[age] > burst then burst = perSecond[age] end
+    end
+    return lines, burst
 end
 
 -- A report heard (or my own): kept with the time it came in.

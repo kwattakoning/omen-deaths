@@ -94,5 +94,5 @@ function Awards.Maybe()
     local a = Awards.Compute(book, week - Awards.WEEK, week)
     if not a.top then return end
     ns.Comm.SendRaw("A|" .. week)
-    ns.Toast.Post(Awards.Line(a))
+    ns.Toast.Post(Awards.Line(a), false, "a")
 end
