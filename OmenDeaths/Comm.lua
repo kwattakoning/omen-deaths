@@ -11,6 +11,7 @@
 --   W|boss                                                               "I post the summary of this boss fight"
 --   U|version                                                            "I post the new-version line" (v0.8.7)
 --   H|owner|version|logged|missed|step|errors|lastError                  how my addon is doing (Health.lua)
+--   T|owner|t|named|week|text                                            the line I chose for my death (0.9.6), so popups match guild chat
 --
 -- Whoever holds more of a player's deaths than the asker sends them. Everyone hears every
 -- message on the guild channel, so a record somebody else already sent is not sent again.
@@ -57,7 +58,8 @@ end
 -- would make a boss of its own on the leaderboard).
 Comm.ROLE_CODE = { tank = "T", healer = "H", dps = "D" }
 Comm.ROLE_FROM = { T = "tank", H = "healer", D = "dps" }
-function Comm.EncodeRecord(kind, owner, r)
+-- wait (field 15, 0.9.6): "w" = my line follows in a T message, hold the popup until then.
+function Comm.EncodeRecord(kind, owner, r, wait)
     local n = Comm.TEXT_LEN
     local msg = table.concat({ kind, Clean(owner, Comm.NAME_LEN), tostring(r.t), Clean(r.c, 11), tostring(r.l or ""),
         Clean(r.it, 8), tostring(r.id or ""), tostring(r.d or ""), Clean(r.z, n), Clean(r.k, n), Clean(r.s, n) }, "|")
@@ -81,7 +83,25 @@ function Comm.EncodeRecord(kind, owner, r)
         if last == 1 then last = 0 end
     end
     for i = 1, last do msg = msg .. "|" .. extra[i] end
+    if wait then
+        local tail = string.rep("|", 3 - last) .. "|w"
+        -- no room: the receiver simply shows its popup at once, as before
+        if #msg + #tail <= Comm.MAX_LEN then msg = msg .. tail end
+    end
     return msg
+end
+
+-- The line of a death as it goes to guild chat (0.9.6). Before, every client drew its own random line.
+-- text empty = no line in guild chat (off, boss fight, battleground): the receiver picks its own.
+function Comm.EncodeLine(owner, t, text, named, week)
+    local head = table.concat({ "T", Clean(owner, Comm.NAME_LEN), tostring(t), named and "1" or "0", tostring(week or 0) }, "|") .. "|"
+    return head .. Clean(text, Comm.MAX_LEN - #head)
+end
+
+function Comm.DecodeLine(msg)
+    local owner, t, named, week, text = msg:match("^T|([^|]+)|(%d+)|([01])|(%d+)|(.*)$")
+    if not owner then return nil end
+    return owner, tonumber(t), { text = text ~= "" and text or nil, named = named == "1", week = tonumber(week) }
 end
 
 local function Split(msg)
@@ -122,7 +142,7 @@ function Comm.DecodeRecord(msg)
         t = t, c = Text(p[4]), l = tonumber(p[5]), it = Text(p[6]), id = tonumber(p[7]), d = tonumber(p[8]),
         z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]), r = Comm.ROLE_FROM[p[13] or ""],
         g = (p[14] == "m" or p[14] == "f") and p[14] or nil,
-    }
+    }, p[15] == "w"
 end
 
 -- "V|a=3:1790000000:1790000900,b=1:1790000500:0" split over as many messages as needed.
@@ -215,7 +235,7 @@ local function Build(item)
         local p = book.players[owner]
         local r = p and p.deaths[t]
         if not r then return nil end
-        return Comm.EncodeRecord(item.record.kind or "R", owner, r)
+        return Comm.EncodeRecord(item.record.kind or "R", owner, r, item.record.wait)
     end
     if item.stat then
         local owner = item.stat.owner
@@ -281,9 +301,13 @@ function Comm.QueueLength() return #queue end
 function Comm.SendRaw(msg) Push({ msg = msg }) end
 
 -- Sends one death record. kind "L" = fresh death, "R" = again.
-function Comm.SendRecord(owner, t, kind, relay)
+function Comm.SendRecord(owner, t, kind, relay, wait)
     local delay = relay and math.random() * Comm.RELAY_JITTER or 0
-    Push({ record = { owner = owner, t = t, kind = kind }, relay = relay, notBefore = GetTime() + delay })
+    Push({ record = { owner = owner, t = t, kind = kind, wait = wait }, relay = relay, notBefore = GetTime() + delay })
+end
+
+function Comm.SendLine(owner, t, text, named, week)
+    Push({ msg = Comm.EncodeLine(owner, t, text, named, week) })
 end
 
 -- Sends the game statistic of `owner` (mine right away, someone else's after a random wait).
@@ -424,14 +448,23 @@ function Comm.OnMessage(prefix, msg, channel, sender)
     end
     local kind = msg:sub(1, 1)
     if kind == "L" or kind == "R" then
-        local k, owner, rec = Comm.DecodeRecord(msg)
+        local k, owner, rec, wait = Comm.DecodeRecord(msg)
         if not k then return end
         owner = ns.ShortName(owner)
         heard[owner .. "/" .. rec.t] = GetTime()
         Seen(sender)
         local result = ns.Data.Add(ns.Book(), owner, rec, ns.SameChar(owner, sender))
         if result then ns.Changed() end
-        if result == "new" and k == "L" and ns.Toast then ns.Toast.Death(owner, rec) end
+        if result == "new" and k == "L" and ns.Toast then ns.Toast.Incoming(owner, rec, wait) end
+    elseif kind == "T" then
+        local owner, t, line = Comm.DecodeLine(msg)
+        if not owner then return end
+        owner = ns.ShortName(owner)
+        -- only who died speaks for that death
+        if owner and ns.SameChar(owner, sender) and ns.Toast then
+            Seen(sender)
+            ns.Toast.HeardLine(owner, t, line)
+        end
     elseif kind == "S" then
         local p = Split(msg)
         local owner, total, at = ns.ShortName(p[2]), tonumber(p[3]), tonumber(p[4])
@@ -559,6 +592,28 @@ end
 function Comm.UpdateClaim()
     local seen = ns.db and ns.GuildName() and ns.Book().updateSeen
     if seen then return "U|" .. seen end
+end
+
+-- Who has the addon and is online, by first name in a fixed order: every client gets the same list,
+-- so they can take turns (the boss summary, 0.9.6). First names: a sender's name may lack the surname.
+function Comm.OnlineOrder()
+    local me, list = ns.MyName(), {}
+    local n = ns.Call(GetNumGuildMembers) or 0
+    for i = 1, n do
+        local name, _, _, _, _, _, _, _, isOnline = ns.Call(GetGuildRosterInfo, i)
+        name = ns.ShortName(name)
+        if name and isOnline then
+            local has = ns.SameChar(name, me)
+            if not has then
+                for peer in pairs(Comm.peers) do
+                    if ns.SameChar(peer, name) then has = true break end
+                end
+            end
+            if has then list[#list + 1] = ns.FirstName(name) or name end
+        end
+    end
+    table.sort(list)
+    return list
 end
 
 -- Guildies online with the addon: those heard from this session and online in the roster now.

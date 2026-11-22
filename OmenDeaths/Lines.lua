@@ -1,5 +1,6 @@
 -- Omen Deaths: a funny line that fits how someone died.
 -- {name} = who died, {killer} = what killed them, {n} = how many times in a row (streak lines).
+-- {NAME}, {KILLER} = the same in capitals (the loudest streak lines).
 -- Lines with {killer} are only used when it is known.
 local _, ns = ...
 local Lines = {}
@@ -32,6 +33,21 @@ Lines.SETS = {
         killer = { "{killer} says hi to {name}", "{name} became a raid statistic, courtesy of {killer}",
             "{name} stood in the wrong spot vs {killer}" },
         plain = { "{name} became a raid statistic", "{name} stood in something purple" },
+        -- 0.9.6: role lines outside dungeons too (wish of the user, 21-11-2026)
+        roles = {
+            tank = {
+                killer = { "{killer} went through {name} and is now looking at the rest of the raid" },
+                plain = { "Main tank down! {name} has delegated aggro to whoever is closest" },
+            },
+            healer = {
+                killer = { "{killer} found the healer. {name}'s raid frames send their condolences" },
+                plain = { "{name} stopped healing. Raid frames are turning a worrying shade of red" },
+            },
+            dps = {
+                killer = { "{name} was busy parsing and did not notice {killer}" },
+                plain = { "{name} was top DPS right up until the floor turned purple" },
+            },
+        },
     },
     -- Dungeon lines per role (09-11-2026: a tank got "found out why the tank goes first"). killer/plain fit
     -- every role; roles[r] adds lines for a known role (rec.r). Unknown role: only the ones for every role.
@@ -59,6 +75,11 @@ Lines.SETS = {
     world = {
         killer = { "{name} picked the wrong fight with {killer}", "{killer} added {name} to their trophy wall",
             "{name} underestimated {killer}", "{name} was humbled by {killer}" },
+        roles = {
+            tank = { killer = { "{name} tried to tank {killer} with nobody watching. Nobody healed either." } },
+            healer = { killer = { "{name} tried to heal through {killer}. Solo. With a mace." } },
+            dps = { killer = { "{name} looked around for a tank. {killer} did not wait." } },
+        },
     },
     -- open world, killer far above my level: red or skull, as the game colours its level
     above = {
@@ -77,28 +98,39 @@ Lines.SETS = {
             [2] = { "{name} lost to {killer}. Again. {killer} is starting to recognise them.",
                 "{name} vs {killer}, round two. Same result." },
             [3] = { "{killer} {n}, {name} 0. Someone call for backup.", "{name} died to {killer} {n} times in a row. Rematch?" },
-            [5] = { "{name} has died to {killer} {n} times in a row. At this point {killer} should get a guild invite.",
+            [4] = { "{name} keeps going back to {killer}. This is no longer a fight, it's a relationship." },
+            [5] = { "{KILLER} OWNS {NAME} NOW. Somebody stop this.",
+                "{name} has died to {killer} {n} times in a row. At this point {killer} should get a guild invite.",
                 "{killer} has claimed {name} {n} times in a row. Somebody stop this." },
+            [10] = { "{name} has died to {killer} {n} times in a row. {killer} has been promoted to Guild Master." },
         },
         fall = {
             [2] = { "{name} fell to their death. Again. The stairs are right there." },
             [3] = { "{name} fell to their death {n} times in a row. Gravity: undefeated." },
+            [4] = { "{name} fell again. The ground has started saving them a spot." },
             [5] = { "{name} has fallen to their death {n} times in a row. Wings are not included." },
+            [10] = { "{name} has fallen to their death {n} times in a row. GRAVITY HAS BEEN PROMOTED TO GUILD MASTER." },
         },
         lava = {
             [2] = { "{name} went for another lava bath. They clearly like it warm." },
             [3] = { "{name} took lava bath number {n} in a row. Somebody hide the lava." },
+            [4] = { "{name} is back in the lava. They have a favourite spot now." },
             [5] = { "{name} has gone for a lava bath {n} times in a row. It's a lifestyle now." },
+            [10] = { "{name} has gone for a lava bath {n} times in a row. THE LAVA NOW PAYS RENT TO {NAME}." },
         },
         drown = {
             [2] = { "{name} forgot to breathe. Again. Gills not included." },
             [3] = { "{name} drowned {n} times in a row. Swimming lessons, anyone?" },
+            [4] = { "{name} drowned again. The fish know them by name now." },
             [5] = { "{name} has drowned {n} times in a row. The fish are starting to worry." },
+            [10] = { "{name} has drowned {n} times in a row. THE FISH HAVE ELECTED {NAME} AS THEIR KING." },
         },
         other = {
             [2] = { "{name} died the same way. Again." },
             [3] = { "{name} died the same way {n} times in a row. A pattern is forming." },
+            [4] = { "{name} died the same way again. Scientists are taking notes." },
             [5] = { "{name} has died the same way {n} times in a row. That's a tradition now." },
+            [10] = { "{name} has died the same way {n} times in a row. THIS IS NOW A GUILD HOLIDAY." },
         },
     },
     -- 0.9.0 (10-11-2026, all ten ideas chosen by the user). {nth} = 200th, {other} = a guildie.
@@ -132,17 +164,63 @@ Lines.SETS = {
     oneshot = {
         killer = { "{killer} took {name} from full health to dead in one hit", "{name} was one-shot by {killer}. Didn't even see it coming." },
     },
+    -- 0.9.6: came back at the Spirit Healer (asked + Resurrection Sickness, measured 2 of 20 returns)
+    spirit = {
+        plain = { "{name} paid the Spirit Healer rather than walk. Shameful.",
+            "{name} looked at the corpse run and chose Resurrection Sickness instead",
+            "{name} took the Spirit Healer's deal. Their gear will remember this." },
+    },
+    -- 0.9.6: passing someone in the All Time top 3, a second line in guild chat
+    rank = {
+        top3 = { "[ALL TIME TOP 3] {name} passes {other} with death number {n}. This one goes in the guild archives." },
+        [2] = { "[ALL TIME #2] {name} overtakes {other} with {n} deaths. Only {leader} stands between them and eternal shame." },
+        [1] = { "[ALL TIME #1] ALL HAIL {NAME}! {n} deaths, {other} has been dethroned. Omen has a new Lord of the Graveyard." },
+    },
     -- mixed into the usual lines, for the class of who died
     class = {
-        WARRIOR = { killer = { "{name} charged {killer}. {killer} charged back." }, plain = { "{name} raged all the way to the graveyard" } },
-        PALADIN = { killer = { "{name}'s bubble was on cooldown vs {killer}" }, plain = { "{name} forgot Divine Shield exists", "Even the Light could not save {name}" } },
-        HUNTER = { killer = { "{name}'s Feign Death did not fool {killer}", "{name}'s pet watched {killer} do it" }, plain = { "{name}'s pet is looking for a new owner" } },
-        ROGUE = { killer = { "{name} vanished. Just not from {killer}" }, plain = { "{name} went into stealth. Permanently." } },
-        PRIEST = { killer = { "{name} forgot to shield themselves vs {killer}" }, plain = { "{name} ran out of mana and out of life" } },
-        SHAMAN = { killer = { "{name}'s totems did nothing against {killer}" }, plain = { "{name}'s totems are still standing. {name} is not." } },
-        MAGE = { killer = { "Blink did not take {name} far enough from {killer}" }, plain = { "{name} blinked straight into the afterlife" } },
-        WARLOCK = { killer = { "{name}'s demon survived {killer}. {name} did not." }, plain = { "{name} paid for that Life Tap with a life" } },
-        DRUID = { killer = { "{name} shapeshifted into a corpse vs {killer}" }, plain = { "{name} turned into a tree. A dead one." } },
+        WARRIOR = { killer = { "{name} charged {killer}. {killer} charged back.", "{name} saved Shield Wall for later. There was no later vs {killer}" },
+            plain = { "{name} raged all the way to the graveyard", "{name} ran out of rage and then out of health" } },
+        PALADIN = { killer = { "{name}'s bubble was on cooldown vs {killer}", "{name} tried to judge {killer}. {killer} judged back." },
+            plain = { "{name} forgot Divine Shield exists", "Even the Light could not save {name}" } },
+        HUNTER = { killer = { "{name}'s Feign Death did not fool {killer}", "{name}'s pet watched {killer} do it", "{name} kited {killer} straight into a wall" },
+            plain = { "{name}'s pet is looking for a new owner", "{name}'s pet held aggro for a full two seconds" } },
+        ROGUE = { killer = { "{name} vanished. Just not from {killer}", "{name} used Evasion. {killer} used hitting them anyway." },
+            plain = { "{name} went into stealth. Permanently.", "{name} backstabbed the air and the air won" } },
+        PRIEST = { killer = { "{name} forgot to shield themselves vs {killer}", "{killer} walked right through {name}'s Power Word: Shield" },
+            plain = { "{name} ran out of mana and out of life", "{name} prayed. Nobody picked up." } },
+        SHAMAN = { killer = { "{name}'s totems did nothing against {killer}", "{name} dropped every totem they had and {killer} stepped over them" },
+            plain = { "{name}'s totems are still standing. {name} is not.", "{name}'s Reincarnation is on cooldown. So is {name}." } },
+        MAGE = { killer = { "Blink did not take {name} far enough from {killer}", "{name} tried to polymorph {killer}. {killer} declined." },
+            plain = { "{name} blinked straight into the afterlife", "{name} had Ice Block ready. {name} also had other plans, apparently." } },
+        WARLOCK = { killer = { "{name}'s demon survived {killer}. {name} did not.", "{name} tried to fear {killer}. {killer} was not afraid." },
+            plain = { "{name} paid for that Life Tap with a life", "{name}'s Soulstone was in the other bag" } },
+        DRUID = { killer = { "{name} shapeshifted into a corpse vs {killer}", "{name} went bear, then cat, then corpse vs {killer}" },
+            plain = { "{name} turned into a tree. A dead one.", "{name} had nine forms to choose from and picked corpse" } },
+    },
+    -- 0.9.6: class and role together, only in dungeons and raids (they talk about a group)
+    classRole = {
+        WARRIOR = {
+            tank = { killer = { "{killer} got through {name}'s shield and the armor behind it" }, plain = { "{name}'s Shield Wall lasted longer than {name} did" } },
+            dps = { killer = { "{name} hit {killer} really hard for about four seconds" }, plain = { "{name} brought two weapons and zero survival" } },
+        },
+        PALADIN = {
+            tank = { killer = { "{name}'s Divine Shield worked perfectly. {killer} just went for the healer, then came back." }, plain = { "{name} consecrated the floor they are now lying on" } },
+            healer = { killer = { "{name} was busy flashing everyone else when {killer} showed up" }, plain = { "{name} had Lay on Hands ready and gave it to the wrong person: everyone else" } },
+            dps = { killer = { "{name} went in swinging at {killer} and forgot to bubble" }, plain = { "{name} brought a two-hander and no plan" } },
+        },
+        DRUID = {
+            tank = { killer = { "{name} went bear. {killer} went hunting." }, plain = { "{name}'s bear form has gone into hibernation" } },
+            healer = { killer = { "{killer} walked through {name}'s HoTs like they were not there" }, plain = { "{name} kept everyone's HoTs rolling, except their own" } },
+            dps = { killer = { "{name} was mid-rotation when {killer} ended it" }, plain = { "{name} ran out of energy and out of options" } },
+        },
+        PRIEST = {
+            healer = { killer = { "{name} had a Renew on everyone but themselves vs {killer}" }, plain = { "{name} healed the whole group. The group did not return the favour." } },
+            dps = { killer = { "{name} tried to mind flay {killer}. {killer} flayed back." }, plain = { "{name} went Shadow and took the darkness a bit too literally" } },
+        },
+        SHAMAN = {
+            healer = { killer = { "{killer} kicked over {name}'s Mana Spring and kept going" }, plain = { "{name} chain healed everyone but the last link: themselves" } },
+            dps = { killer = { "{name} threw lightning at {killer}. {killer} threw {name}." }, plain = { "{name} grounded themselves. Six feet deep." } },
+        },
     },
     generic = {
         plain = { "{name} bit the dust", "{name} is taking a dirt nap", "{name} joined the Spirit Healer fan club",
@@ -184,7 +262,17 @@ function Lines.Render(template, name, killer, vars)
     return (template:gsub("{name}", function() return name end):gsub("{killer}", function() return killer or "" end)
         :gsub("{nth}", function() return type(n) == "number" and Lines.Nth(n) or "" end)
         :gsub("{n}", function() return tostring(n or "") end)
-        :gsub("{other}", function() return vars.other or "" end))
+        :gsub("{other}", function() return vars.other or "" end)
+        :gsub("{leader}", function() return vars.leader or "" end)
+        :gsub("{NAME}", function() return Lines.Loud(name) end)
+        :gsub("{KILLER}", function() return Lines.Loud(killer or "") end))
+end
+
+-- In capitals, leaving a colour code around the text intact (the popup's chat line colours the name).
+function Lines.Loud(s)
+    local open, body, close = s:match("^(|c%x%x%x%x%x%x%x%x)(.-)(|r)$")
+    if open then return open .. body:upper() .. close end
+    return s:upper()
 end
 
 -- What the streak looks at: the killer, else a kind of damage from the recap (Falling, Lava...).
@@ -218,7 +306,12 @@ end
 function Lines.StreakList(rec, n)
     if n < 2 then return nil end
     local set = Lines.SETS.streak[rec.k and "killer" or ENV[rec.s]] or Lines.SETS.streak.other
-    return set[n >= 5 and 5 or n >= 3 and 3 or 2]
+    local step = n >= 10 and 10 or n >= 5 and 5 or n
+    -- 0.9.6: the count up front, so a streak stands out in guild chat (no colours there)
+    local tag = "[{n}x STREAK" .. (n >= 10 and "!!!" or n >= 5 and "!" or "") .. "] "
+    local list = {}
+    for i, template in ipairs(set[step]) do list[i] = tag .. template end
+    return list
 end
 
 -- All Time of the owner up to and including this death: the game's statistic (without battlegrounds)
@@ -236,6 +329,31 @@ function Lines.AllTime(rec, owner, book)
     end
     local fromStat = st and (st.total - (st.bg or 0) + after) or 0
     return math.max(seen, fromStat)
+end
+
+-- Did this death move me up the All Time board? Returns { from, to, n, other, leader } or nil.
+-- Only really passing counts: someone with as many deaths as me stays ahead of me, in both the
+-- rank before and after (the board itself orders equal counts by name). Not on my first death.
+function Lines.RankUp(rec, owner, book)
+    if not book or not owner then return nil end
+    local mine = Lines.AllTime(rec, owner, book)
+    if not mine or mine < 2 then return nil end
+    local ahead, passed = {}, {}
+    for name in pairs(book.players) do
+        if name ~= owner and ns.Data.Shown(name) then
+            local n = Lines.AllTime({ t = rec.t, it = "none" }, name, book) or 0
+            if n >= mine then ahead[#ahead + 1] = { name = name, n = n }
+            elseif n == mine - 1 then passed[#passed + 1] = name end
+        end
+    end
+    if #passed == 0 then return nil end
+    table.sort(passed)
+    table.sort(ahead, function(a, b)
+        if a.n ~= b.n then return a.n > b.n end
+        return a.name < b.name
+    end)
+    local to = #ahead + 1
+    return { from = to + #passed, to = to, n = mine, other = passed[1], leader = ahead[1] and ahead[1].name }
 end
 
 Lines.MILESTONES = { [10] = true, [25] = true, [50] = true } -- then every 100 (chosen by the user)
@@ -326,15 +444,19 @@ function Lines.For(rec, name, book)
         -- class lines mix in, not for falls, lava and other kinds of damage
         local envKind = not rec.k and rec.s and ENV[rec.s]
         local class = not envKind and Lines.SETS.class[rec.c or ""] or nil
+        local inGroup = rec.it == "party" or rec.it == "raid"
+        local combo = inGroup and not envKind and rec.r and (Lines.SETS.classRole[rec.c or ""] or {})[rec.r] or nil
         list, named = Lines.SETS.generic.plain, false
         if rec.k and set.killer then
             list, named = set.killer, true
             if role and role.killer then list = Lines.Merge(list, role.killer) end
             if class and class.killer then list = Lines.Merge(list, class.killer) end
+            if combo and combo.killer then list = Lines.Merge(list, combo.killer) end
         elseif set.plain then
             list = set.plain
             if role and role.plain then list = Lines.Merge(list, role.plain) end
             if class and class.plain then list = Lines.Merge(list, class.plain) end
+            if combo and combo.plain then list = Lines.Merge(list, combo.plain) end
         elseif class and class.plain then
             list = Lines.Merge(list, class.plain)
         end

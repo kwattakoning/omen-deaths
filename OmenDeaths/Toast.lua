@@ -92,7 +92,7 @@ end
 
 -- Post log (0.9.5): every line this addon put in guild chat, newest last, in OmenDeathsDB.postLog.
 -- 13-11-2026 a guildie sent several lines at once and nothing showed what they were.
--- Per line: t = server time, k = kind (d death, b boss summary, a awards, u new version),
+-- Per line: t = server time, k = kind (d death, b boss summary, a awards, u new version, r rank, s Spirit Healer),
 -- w = whole seconds it waited before going out (chat held back, or waiting for a click),
 -- c = sent at a click, x = the game refused it.
 -- KEEP 12: the most deaths of one guildie in one evening (Chrysi 13-11-2026, 12 in battlegrounds).
@@ -123,6 +123,12 @@ function Toast.PostLogText(now, maxLen)
     if #parts > 0 then return table.concat(parts, ",") end
 end
 
+-- The second line that belongs to my death line (top 3 of All Time): right behind it.
+local function SendFollow(msg, queued, click)
+    local ok = Send(msg)
+    Toast.LogPost("r", queued, ok, click)
+end
+
 poster:SetScript("OnUpdate", function(self)
     if Locked() then return end
     while outbox[1] do
@@ -133,11 +139,12 @@ poster:SetScript("OnUpdate", function(self)
             -- the line before has not come back yet: it counts as lost
             Missed()
             if ns.db and ns.db.clickMode then
-                waiting = { msg = item.msg, queued = item.queued }
+                waiting = { msg = item.msg, queued = item.queued, follow = item.follow }
                 Toast.Note("click")
             else
                 local ok, err = Send(item.msg)
                 Toast.LogPost(item.kind, item.queued, ok)
+                if ok and item.follow then SendFollow(item.follow, item.queued) end
                 waiting = ok and { msg = item.msg, at = GetTime(), auto = true } or nil
                 Toast.Note(ok and "sent" or "err", not ok and err or nil)
                 Report()
@@ -183,6 +190,10 @@ function Toast.Click()
     local ok, err = Send(waiting.msg)
     Toast.LogPost("d", waiting.queued, ok, true)
     if ok then
+        if waiting.follow then
+            SendFollow(waiting.follow, waiting.queued, true)
+            waiting.follow = nil
+        end
         waiting.at = GetTime()
         Toast.Note("sent")
     else
@@ -219,29 +230,52 @@ end
 ns.On("PLAYER_LOGIN", function() Toast.HookClicks() end)
 
 -- "[Omen Deaths] Hogger says hi to Benny - by Rend in Elwynn Forest. Deaths this week: 3"
-function Toast.GuildLine(owner, rec)
+-- rank (0.9.6): moved up All Time. Outside the top 3 a short note at the end, always kept whole.
+function Toast.GuildLine(owner, rec, rank)
     local text, named = ns.Lines.For(rec, owner)
     local line = "[Omen Deaths] " .. text
     local detail = ns.Lines.Detail(rec, named)
     if detail ~= "" then line = line .. " - " .. detail end
     local n = ns.Data.CountFor(ns.Book(), owner, "week")
     if n > 0 then line = line .. ". Deaths this week: " .. n end
-    return Toast.Fit(line)
+    if rank and rank.to > 3 then
+        local note = " [Rank " .. rank.from .. " > " .. rank.to .. "]"
+        return Toast.Fit(line, Toast.CHAT_MAX - #note) .. note, text, named, n
+    end
+    return Toast.Fit(line), text, named, n
+end
+
+-- The second line when I pass someone in the All Time top 3.
+function Toast.RankLine(owner, rank)
+    local sets = ns.Lines.SETS.rank
+    local list = sets[rank.to] or sets.top3
+    return "[Omen Deaths] " .. ns.Lines.Render(list[math.random(#list)], owner, nil,
+        { n = rank.n, other = rank.other, leader = rank.leader })
+end
+
+-- Came back at the Spirit Healer: one line in guild chat (not from a battleground).
+function Toast.SpiritPost(entry)
+    if not ns.db or not ns.db.settings.guildChat or not ns.GuildName() then return end
+    if entry and (entry.it == "pvp" or entry.it == "arena") then return end
+    local list = ns.Lines.SETS.spirit.plain
+    Toast.Post("[Omen Deaths] " .. ns.Lines.Render(list[math.random(#list)], ns.MyName()), false, "s")
 end
 
 -- No "|" (chat escape codes) and at most CHAT_MAX bytes, not cutting a character in half.
-function Toast.Fit(line)
+function Toast.Fit(line, max)
+    max = max or Toast.CHAT_MAX
     line = line:gsub("|", "")
-    if #line > Toast.CHAT_MAX then
-        line = line:sub(1, Toast.CHAT_MAX):gsub("[\192-\255][\128-\191]*$", "")
+    if #line > max then
+        line = line:sub(1, max):gsub("[\192-\255][\128-\191]*$", "")
     end
     return line
 end
 
 -- Posts a line in guild chat as soon as chat is allowed. mine = the line of my own death.
 -- kind for the post log: "d" death (default for mine), "b" boss summary, "a" awards, "u" new version.
-function Toast.Post(line, mine, kind)
-    outbox[#outbox + 1] = { msg = Toast.Fit(line), mine = mine, kind = kind or (mine and "d") or "?", queued = GetTime() }
+function Toast.Post(line, mine, kind, follow)
+    outbox[#outbox + 1] = { msg = Toast.Fit(line), mine = mine, kind = kind or (mine and "d") or "?", queued = GetTime(),
+        follow = follow and Toast.Fit(follow) or nil }
     if mine then Toast.Note(Locked() and "wait" or "queued") end
     poster:Show()
 end
@@ -258,9 +292,16 @@ function Toast.GuildPost(owner, t)
     -- battlegrounds and arenas: never (0.9.4). Up to 0.9.3 a button step "On" posted them, and the
     -- step after "Off" was "On": a guildie flooded guild chat from a battleground (13-11-2026).
     if Toast.IsBG(rec) then return Toast.Note("bg") end
-    -- died in a boss fight: the summary after the fight covers it (Wipe.lua)
-    if ns.Wipe and ns.Wipe.Covers(rec) then return Toast.Note("boss") end
-    Toast.Post(Toast.GuildLine(owner, rec), true)
+    local rank = ns.Lines.RankUp(rec, owner, ns.Book())
+    local top3 = rank and rank.to <= 3 and Toast.RankLine(owner, rank) or nil
+    -- died in a boss fight: the summary after the fight covers it (Wipe.lua); a top 3 line follows it
+    if ns.Wipe and ns.Wipe.Covers(rec) then
+        if top3 then ns.Wipe.HoldRank(rec, top3) end
+        return Toast.Note("boss")
+    end
+    local line, text, named, week = Toast.GuildLine(owner, rec, rank)
+    Toast.Post(line, true, nil, top3)
+    return text, named, week
 end
 
 -- The game's own popups (StaticPopup1-4, "Release Spirit" among them) stand at the top of the
@@ -285,9 +326,12 @@ function Toast.Anchor()
     end
 end
 
+-- The popup's height: 64 as always, more when a long line wraps. Padding = (64 - skull 40) / 2.
+Toast.MIN_HEIGHT, Toast.PADDING = 64, 12
+Toast.TEXT_X = 62 -- skull at 12 + its width 40 + gap 10
 local function Build()
     frame = CreateFrame("Frame", "OmenDeathsToast", UIParent, "BackdropTemplate")
-    frame:SetSize(360, 64)
+    frame:SetSize(360, Toast.MIN_HEIGHT)
     frame:SetPoint("TOP", UIParent, "TOP", 0, Toast.TOP_Y)
     frame:SetFrameStrata("HIGH")
     frame:SetBackdrop({
@@ -307,7 +351,8 @@ local function Build()
 
     local title = frame:CreateFontString(nil, "OVERLAY")
     title:SetFont("Fonts\\MORPHEUS.TTF", 16, "OUTLINE")
-    title:SetPoint("TOPLEFT", skull, "TOPRIGHT", 10, 0)
+    -- at the frame's top, the same spot as the skull's top at the normal height: the frame can grow
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", Toast.TEXT_X, -Toast.PADDING)
     title:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
     title:SetJustifyH("LEFT")
     title:SetTextColor(1, 0.82, 0)
@@ -341,11 +386,11 @@ end
 local function Pick(list) return list[math.random(#list)] end
 
 -- "to Hogger (Rend) in The Deadmines · #3 this week"
-function Toast.Detail(owner, rec, named)
+function Toast.Detail(owner, rec, named, week)
     local parts = {}
     local d = ns.Lines.Detail(rec, named)
     if d ~= "" then parts[#parts + 1] = d end
-    local n = ns.Data.CountFor(ns.Book(), owner, "week")
+    local n = week or ns.Data.CountFor(ns.Book(), owner, "week")
     if n > 0 then parts[#parts + 1] = "#" .. n .. " this week" end
     return table.concat(parts, " · ")
 end
@@ -375,10 +420,16 @@ local function Show(title, line)
     if not frame then Build() end
     frame.title:SetText(title)
     frame.line:SetText(line)
+    -- a streak stands out in orange (colour by feel, as the rest of the popup)
+    if title:find("^%[%d+x STREAK") then frame.title:SetTextColor(1, 0.45, 0)
+    else frame.title:SetTextColor(1, 0.82, 0) end
     frame.started = GetTime()
     frame:SetAlpha(1)
     Toast.Anchor()
     frame:Show()
+    -- after Show: the text is laid out at the frame's width, so a wrapped line counts
+    local needed = frame.title:GetStringHeight() + 4 + frame.line:GetStringHeight() + 2 * Toast.PADDING
+    frame:SetHeight(math.max(Toast.MIN_HEIGHT, needed))
 end
 
 -- A guildie runs a newer version (0.9.3): the same popup as a death, once per newer version heard.
@@ -389,7 +440,56 @@ function Toast.Update(version)
         "You have " .. ns.VERSION .. " · Update via CurseForge, then restart")
 end
 
-function Toast.Death(owner, rec)
+-- The popup of a guildie shows the line that went to guild chat (0.9.6). It comes in a T message:
+-- before the L when the killer was known at once, after it (L carries "w") when it was not.
+local heldDeaths, earlyLines = {}, {}
+-- A held popup that never gets its line (message lost, or the player logged out) shows with an own line
+-- after the longest time measured between a death and coming back: 268 s (20 deaths, 22-11-2026).
+-- The line normally comes sooner: the killer was known at once in 19 of those 20.
+Toast.LINE_WAIT = 268
+
+function Toast.Incoming(owner, rec, wait)
+    local key = owner .. "/" .. rec.t
+    local line = earlyLines[key]
+    earlyLines[key] = nil
+    if line then
+        Toast.Death(owner, rec, line)
+    elseif wait then
+        heldDeaths[key] = true
+        if C_Timer and C_Timer.After then
+            C_Timer.After(Toast.LINE_WAIT, function()
+                if not heldDeaths[key] then return end
+                heldDeaths[key] = nil
+                local p = ns.Book().players[owner]
+                Toast.Death(owner, p and p.deaths[rec.t] or rec)
+            end)
+        end
+    else
+        Toast.Death(owner, rec)
+    end
+end
+
+function Toast.HeardLine(owner, t, line)
+    local key = owner .. "/" .. t
+    local p = ns.Book().players[owner]
+    local rec = p and p.deaths[t]
+    if heldDeaths[key] then
+        heldDeaths[key] = nil
+        -- from the book: it has the killer that arrived after the first message
+        if rec then Toast.Death(owner, rec, line) end
+    elseif not rec then
+        earlyLines[key] = line
+    end
+end
+
+-- The name in class colour inside a line that came ready-made.
+local function ColorName(text, owner, colored)
+    local a, b = text:find(owner, 1, true)
+    if not a then return text end
+    return text:sub(1, a - 1) .. colored .. text:sub(b + 1)
+end
+
+function Toast.Death(owner, rec, shared)
     if not ns.db or not rec then return end
     local mine = owner == ns.MyName()
     -- a guildie's death in a battleground or arena: no popup, sound or chat line (0.9.4, user's
@@ -397,16 +497,21 @@ function Toast.Death(owner, rec)
     if not mine and Toast.IsBG(rec) then return end
     if not mine and ns.db.settings.sound then Toast.Sound(rec.g) end
     local headline, named, template, n
+    local sharedText = not mine and shared and shared.text
     if mine then
         headline, named = Pick(SELF), false
+    elseif sharedText then
+        headline, named = sharedText, shared.named
     else
         headline, named, template, n = ns.Lines.For(rec, owner)
     end
-    local detail = Toast.Detail(owner, rec, named)
+    local detail = Toast.Detail(owner, rec, named, sharedText and shared.week or nil)
     Toast.last = { headline = headline, detail = detail }
     if ns.db.settings.chat then
         -- the popup's line, with the name in class colour
-        local text = mine and headline or ns.Lines.Render(template, ns.Colored(owner, ns.ClassColor(rec.c)), rec.k, n)
+        local colored = not mine and ns.Colored(owner, ns.ClassColor(rec.c))
+        local text = mine and headline or (sharedText and ColorName(sharedText, owner, colored))
+            or ns.Lines.Render(template, colored, rec.k, n)
         ns.Print(text .. (detail ~= "" and (" — " .. detail) or ""))
     end
     if ns.db.settings.toast then Show(headline, detail) end

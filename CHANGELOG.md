@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.6
+- The popup for a guildie's death now shows the same line as guild chat. Both of you need this version; if the killer is not known right away, the popup waits for the line
+- Many more lines per class, new lines for class and role together, and role lines in raids and the open world too
+- Streaks stand out: [3x STREAK] up front in guild chat, an orange popup, and louder lines at 4, 5 and 10 in a row
+- All Time rank-ups: a short [Rank 33 > 32] at the end of your line, and a line of its own when you pass someone in the top 3
+- Taking the Spirit Healer's deal now gets you publicly shamed in guild chat
+- Fixes a double boss summary: addons now take turns
+- A popup can no longer get lost when the message with the line does not arrive
+
 ## 0.9.5
 - Fixes game stutter when a guildie logs in: the addon no longer re-sends every death it knows each time someone logs in or reloads. Update helps you and your guild most when everyone has it
 - Behind the scenes only, nothing changes in your game: the addon keeps a short log of the lines it posts in guild chat (so a flood of lines can be explained), and measures what the game's damage meter and duels give, for future features (boss fights, duels)

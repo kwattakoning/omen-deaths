@@ -2,9 +2,9 @@
 --
 -- Deaths between ENCOUNTER_START and ENCOUNTER_END get no line of their own. After the fight
 -- one guildie posts the summary: everyone who was in the fight waits WAIT seconds (so the
--- deaths the game held back during the fight have arrived over the addon channel) plus a
--- random 0..RELAY_JITTER, then the first to go sends a claim "W|<boss>" on the addon channel
--- and posts; whoever hears a claim first stays quiet.
+-- deaths the game held back during the fight have arrived over the addon channel) plus its turn
+-- (0.9.6, a fixed order instead of a random wait, which could give two summaries), then the first
+-- to go sends a claim "W|<boss>" on the addon channel and posts; whoever hears a claim stays quiet.
 local _, ns = ...
 local Wipe = {}
 ns.Wipe = Wipe
@@ -12,6 +12,8 @@ ns.Wipe = Wipe
 Wipe.WAIT = 5            -- seconds after the fight (not measured, see CONTEXT.md)
 Wipe.CLAIM_WINDOW = 120  -- a claim for the same boss within this many seconds counts as "already posted"
 Wipe.KEEP = 5            -- recent fights remembered
+-- Seconds between two turns: above the slowest guild echo measured, 0.83 s (22-11-2026).
+Wipe.STEP = 1
 
 local fights = {}        -- recent fights: { key, name, iid, z, start, stop, success }
 local current
@@ -34,6 +36,38 @@ function Wipe.Boss(rec)
         local f = fights[i]
         local here = f.iid and rec.id == f.iid or (not f.iid and rec.z == f.z)
         if here and rec.t >= f.start and (not f.stop or rec.t <= f.stop + 1) then return f.name end
+    end
+end
+
+-- My turn in the fixed order of online addon users (0 = first).
+function Wipe.Turn()
+    local mine = ns.FirstName(ns.MyName())
+    for i, name in ipairs(ns.Comm.OnlineOrder()) do
+        if name == mine then return i - 1 end
+    end
+    return 0
+end
+
+-- A top 3 line from a boss fight: my own, after everyone's turn for the summary has passed.
+local function PostRank(f)
+    local function go()
+        local line = f.rankLine
+        f.rankLine = nil
+        if line and ns.db and ns.db.settings.guildChat and ns.GuildName() then ns.Toast.Post(line, false, "r") end
+    end
+    local wait = Wipe.WAIT + (#ns.Comm.OnlineOrder() + 1) * Wipe.STEP
+    if C_Timer and C_Timer.After then C_Timer.After(wait, go) else go() end
+end
+
+function Wipe.HoldRank(rec, line)
+    for i = #fights, 1, -1 do
+        local f = fights[i]
+        local here = f.iid and rec.id == f.iid or (not f.iid and rec.z == f.z)
+        if here and rec.t >= f.start and (not f.stop or rec.t <= f.stop + 1) then
+            f.rankLine = line -- a later death in this fight replaces it: the newest place counts
+            if f.stop then PostRank(f) end
+            return
+        end
     end
 end
 
@@ -133,18 +167,20 @@ ns.On("ENCOUNTER_END", function(_, _, _, _, success)
     current = nil
     f.stop = ns.Now()
     f.success = ns.Safe(success) == 1
-    local wait = Wipe.WAIT + math.random() * ns.Comm.RELAY_JITTER
+    local wait = Wipe.WAIT + Wipe.Turn() * Wipe.STEP
     if C_Timer and C_Timer.After then
         C_Timer.After(wait, function() Wipe.Summarize(f) end)
     else
         Wipe.Summarize(f)
     end
+    if f.rankLine then PostRank(f) end
 end)
 
 -- Left the instance mid-fight (released, disconnected): the fight is over for us.
 ns.On("PLAYER_ENTERING_WORLD", function()
     if current then
         current.stop = ns.Now()
+        if current.rankLine then PostRank(current) end
         current = nil
     end
 end)

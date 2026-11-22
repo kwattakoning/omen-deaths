@@ -239,9 +239,12 @@ end
 
 -- The death is complete (killer known, or given up on): time for the guild chat line.
 local function Done()
-    local owner, t = pending.owner, pending.t
+    local owner, t, announced = pending.owner, pending.t, pending.sent
     pending = nil
-    if ns.Toast and ns.Toast.GuildPost then ns.Toast.GuildPost(owner, t) end
+    local text, named, week
+    if ns.Toast and ns.Toast.GuildPost then text, named, week = ns.Toast.GuildPost(owner, t) end
+    -- the guild's popups show this same line (0.9.6); guildies holding their popup always get an answer
+    if text or announced then ns.Comm.SendLine(owner, t, text, named, week) end
     -- the measurement log changed: tell the guild how the addon is doing
     if ns.Comm.SendHealth then ns.Comm.SendHealth() end
 end
@@ -342,8 +345,10 @@ function Death.Record()
     -- which functions the two APIs have in this client: shows other ways to the recap
     ns.db.recapApi = { meter = Names(C_DamageMeter), recap = Names(C_DeathRecap), version = ns.VERSION }
     TryKiller(false, "death") -- usually known at once; then the guild hears it with the killer
+    -- killer not known yet: the line comes later, so guildies hold their popup for it
+    local lineFollows = pending ~= nil
     if pending then pending.sent = true end
-    ns.Comm.SendRecord(me, rec.t, "L")
+    ns.Comm.SendRecord(me, rec.t, "L", nil, lineFollows)
     ns.Changed()
     if ns.Toast then ns.Toast.Death(me, book.players[me].deaths[rec.t]) end
 end
@@ -390,10 +395,17 @@ local function NoteBack(event)
     xpLossAsked = nil
     -- the debuff can come a moment later
     if C_Timer and C_Timer.After then
-        C_Timer.After(Death.RECHECK, function() e.back.sick = Sick() end)
+        C_Timer.After(Death.RECHECK, function() Death.NoteSick(e) end)
     else
-        e.back.sick = Sick()
+        Death.NoteSick(e)
     end
+end
+
+-- The Spirit Healer asked and the sickness is there: measured on exactly the 2 of 20 returns that
+-- used the Spirit Healer (22-11-2026). Both are needed: you can say no to the question and walk.
+function Death.NoteSick(e)
+    e.back.sick = Sick()
+    if e.back.xpLoss and e.back.sick == "yes" and ns.Toast then ns.Toast.SpiritPost(e) end
 end
 ns.On("PLAYER_UNGHOST", function() NoteBack("PLAYER_UNGHOST") end)
 ns.On("PLAYER_ALIVE", function()
