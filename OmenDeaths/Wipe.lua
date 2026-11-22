@@ -22,7 +22,9 @@ local claims = {}        -- key -> GetTime() a summary for that boss was claimed
 -- Was this death inside a boss fight (one that is going on, or one of the recent ones)?
 -- Only at the place of the fight: a fight whose end never came (08-11-2026, a guildie's open-world
 -- death got no guild chat line; most likely cause) cannot swallow deaths elsewhere.
+-- Dungeons (0.9.9, the user's choice): everyone posts their own line, also in a boss fight.
 function Wipe.Covers(rec)
+    if rec.it == "party" then return false end
     for _, f in ipairs(fights) do
         local here = f.iid and rec.id == f.iid or (not f.iid and rec.z == f.z)
         if here and rec.t >= f.start and (not f.stop or rec.t <= f.stop + 1) then return true end
@@ -140,6 +142,7 @@ function Wipe.Line(f, names, count, pick)
 end
 
 function Wipe.Summarize(f)
+    if f.it == "party" then return end
     if not ns.db or not ns.db.settings.guildChat or not ns.GuildName() then return end
     if Wipe.Claimed(f.key) then return end
     local names, count = Wipe.Fallen(f)
@@ -155,7 +158,7 @@ ns.On("ENCOUNTER_START", function(id, name)
     current = {
         key = tostring(id or name or where.z or "?"),
         name = type(name) == "string" and name ~= "" and name or nil,
-        iid = where.id, z = where.z, start = ns.Now(),
+        iid = where.id, z = where.z, it = where.it, start = ns.Now(),
     }
     table.insert(fights, current)
     while #fights > Wipe.KEEP do table.remove(fights, 1) end
