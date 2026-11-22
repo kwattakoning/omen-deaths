@@ -42,7 +42,8 @@ NewUI.SETTINGS = {
     { key = "toast", label = "Popup", help = "Show the banner when a guildie dies" },
     { key = "chat", label = "My chat", help = "Show deaths in your own chat window" },
     { key = "sound", label = "Sound", help = "The death scream when a guildie dies. Only you hear it" },
-    { key = "autoRepair", label = "Auto repair", help = "Repair at merchants. The guild pays when it lets you" },
+    { key = "autoRepair", label = "Auto repair", help = "Repair your gear when you open a merchant" },
+    { key = "guildRepair", label = "Guild repairs", help = "Auto repair pays from the guild bank when it lets you. Off: you pay" },
 }
 
 local QUIPS = {

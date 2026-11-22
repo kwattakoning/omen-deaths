@@ -229,8 +229,9 @@ and makes fun of every death in guild chat.
 
  Does the addon spend my gold?
    Only on repairs: when you open a merchant who can repair, it repairs
-   all your gear (the guild pays when it lets you). You see the cost in
-   your chat. Switch it off in the Repairs view or type /omen repair.
+   all your gear. You see the cost in your chat. Switch it off in
+   Settings or type /omen repair. It only uses the guild bank when you
+   switch on Guild repairs in Settings.
 
  Can I turn the guild chat messages off?
    Yes: click the "Guild chat" button in the window until it says "Off".

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.10
+- New setting Guild repairs (off by default): choose if auto repair may pay from the guild bank. Off means you pay yourself
+- The Repairs board now only counts what players paid themselves
+- With Guild repairs on, the addon also checks if the guild bank holds enough gold
+
 ## 0.9.9
 - Dungeons: everyone now posts their own funny line, also in a boss fight. Raids keep one summary per fight
 

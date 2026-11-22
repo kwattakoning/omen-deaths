@@ -2,6 +2,8 @@
 -- on by default, with a leaderboard).
 -- Counting: while a merchant that repairs is open, every drop of the repair bill (GetRepairAllCost) is a
 -- repair: automatic, by hand (Repair All or one item) alike. Buying something does not change the bill.
+-- The board counts only what players paid themselves: a repair paid by the guild is not added (user's
+-- choice). The guild only pays for auto repair when the setting Guild repairs is on (off by default).
 -- Kept per day: book.players[name].rep[dayStart] = { c = copper, n = repairs }. Each player sends only
 -- their own (M|owner|day|copper|n), at a repair and at login for the last SYNC_DAYS days.
 local _, ns = ...
@@ -114,7 +116,20 @@ function Repair.SendMine()
     Send(me, days)
 end
 
-local open, auto -- open = { cost = bill now } while a merchant that repairs is open; auto = I repaired
+-- open = { cost = bill now, guild = the running Repair All is paid by the guild } while a merchant
+-- that repairs is open; auto = I repaired
+local open, auto
+
+-- May the guild pay this bill? The same sum as the game's own merchant window: my limit (-1 = no
+-- limit), and never more than the bank holds.
+function Repair.GuildCanPay(cost)
+    if not (CanGuildBankRepair and GetGuildBankWithdrawMoney and GetGuildBankMoney) then return false end
+    if ns.Call(CanGuildBankRepair) ~= true then return false end
+    local left, bank = ns.Safe(ns.Call(GetGuildBankWithdrawMoney)), ns.Safe(ns.Call(GetGuildBankMoney))
+    if type(left) ~= "number" or type(bank) ~= "number" then return false end
+    if left == -1 then left = bank end
+    return math.min(left, bank) >= cost
+end
 
 function Repair.Paid(copper)
     local me = ns.MyName()
@@ -139,7 +154,13 @@ function Repair.Check()
     if c < open.cost then
         local paid = open.cost - c
         open.cost = c
-        Repair.Paid(paid)
+        local byGuild = open.guild
+        open.guild = nil
+        if byGuild then
+            if auto then ns.Print("Repaired for " .. Repair.Money(paid) .. ", paid by the guild.") end
+        else
+            Repair.Paid(paid)
+        end
     else
         open.cost = c
     end
@@ -153,19 +174,22 @@ function Repair.Show()
     if not (ns.db and ns.db.settings.autoRepair) or cost <= 0 or not RepairAllItems then return end
     local _, can = ns.Call(GetRepairAllCost)
     if ns.Safe(can) == false then return end
-    -- the guild pays when it lets me (guild banks may not exist in Forever: only if the client has it)
-    local guild = CanGuildBankRepair and ns.Call(CanGuildBankRepair) == true
-    if guild and GetGuildBankWithdrawMoney then
-        local left = ns.Safe(ns.Call(GetGuildBankWithdrawMoney))
-        guild = type(left) == "number" and (left == -1 or left >= cost)
-    end
+    local guild = ns.db.settings.guildRepair == true and Repair.GuildCanPay(cost)
     if not guild then
         local money = ns.Safe(ns.Call(GetMoney))
         if type(money) ~= "number" or money < cost then return end
     end
     auto = true
+    open.guild = guild or nil
     pcall(RepairAllItems, guild or nil)
     Repair.Check()
+end
+
+-- Also the game's own guild repair button: that bill is not the player's either.
+if hooksecurefunc and RepairAllItems then
+    hooksecurefunc("RepairAllItems", function(useGuild)
+        if open then open.guild = useGuild and true or nil end
+    end)
 end
 
 ns.On("MERCHANT_SHOW", function() Repair.Show() end)
