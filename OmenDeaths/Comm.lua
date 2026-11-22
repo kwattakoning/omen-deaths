@@ -12,8 +12,11 @@
 --   U|version                                                            "I post the new-version line" (v0.8.7)
 --   H|owner|version|logged|missed|step|errors|lastError                  how my addon is doing (Health.lua)
 --   T|owner|t|named|week|text                                            the line I chose for my death (0.9.6), so popups match guild chat
---   D|reporter|winner|loser|K or F|t|winnerLevel|loserLevel              a guild duel (0.9.7, measurement; F = fled)
---   Q|latest                                                             "send me the duel reports after this time"
+--   D|reporter|winner|loser|K or F|t|winnerLevel|loserLevel|r            a guild duel (0.9.7, measurement; F = fled; r = answer to Q)
+--   Q|from                                                               "I am complete up to this time, send me what follows"
+--   K|npc|at|name                                                        the NPC number of a killer, learned by seeing it (0.9.8)
+--   X|npc|at|name                                                        the same, as an answer to J
+--   J|from|count|latest                                                  "I am complete up to from, and hold this many"
 --
 -- Whoever holds more of a player's deaths than the asker sends them. Everyone hears every
 -- message on the guild channel, so a record somebody else already sent is not sent again.
@@ -37,9 +40,12 @@ Comm.CPS, Comm.BURST, Comm.OVERHEAD = 800, 4000, 40
 -- sender is usually heard by the rest before they start (not measured, see CONTEXT.md).
 Comm.RELAY_JITTER = 3
 -- Duel reports per answer: what fits in one burst, so a sync never builds a queue (the stutter of
--- 0.9.4). A report is at most 98 bytes: "D" + 3 names of 25 + K/F + time 10 + 2 levels of 2 + 7 separators.
-Comm.DUEL_MSG_MAX = 98
+-- 0.9.4). A report is at most 100 bytes: "D" + 3 names of 25 + K/F + time 10 + 2 levels of 2 + "r" + 8 separators.
+Comm.DUEL_MSG_MAX = 100
 Comm.DUEL_SYNC_MAX = math.floor(Comm.BURST / (Comm.DUEL_MSG_MAX + Comm.OVERHEAD))
+-- The same for NPC numbers: "K" + number 7 + time 10 + name TEXT_LEN 57 + 3 separators = 78 bytes.
+Comm.NPC_MSG_MAX = 78
+Comm.NPC_SYNC_MAX = math.floor(Comm.BURST / (Comm.NPC_MSG_MAX + Comm.OVERHEAD))
 
 Comm.peers = {}  -- name -> { version, seen = GetTime() }
 local heard = {} -- "owner/t" -> GetTime() a record was last heard on the channel
@@ -89,10 +95,18 @@ function Comm.EncodeRecord(kind, owner, r, wait)
         if last == 1 then last = 0 end
     end
     for i = 1, last do msg = msg .. "|" .. extra[i] end
-    if wait then
-        local tail = string.rep("|", 3 - last) .. "|w"
-        -- no room: the receiver simply shows its popup at once, as before
-        if #msg + #tail <= Comm.MAX_LEN then msg = msg .. tail end
+    -- field 16 (0.9.8): what the killer is, an NPC number or the class of a player. Older versions
+    -- read fewer fields and leave it. No room: the portrait goes first, the wait flag stays.
+    local who = r.ni and tostring(r.ni) or (type(r.kc) == "string" and Clean(r.kc, 11)) or nil
+    if wait or who then
+        local tail = string.rep("|", 3 - last) .. "|" .. (wait and "w" or "")
+        local full = who and (tail .. "|" .. who) or tail
+        if #msg + #full <= Comm.MAX_LEN then
+            msg = msg .. full
+        elseif wait and #msg + #tail <= Comm.MAX_LEN then
+            -- no room for the flag either: the receiver simply shows its popup at once, as before
+            msg = msg .. tail
+        end
     end
     return msg
 end
@@ -148,12 +162,23 @@ function Comm.DecodeRecord(msg)
         t = t, c = Text(p[4]), l = tonumber(p[5]), it = Text(p[6]), id = tonumber(p[7]), d = tonumber(p[8]),
         z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]), r = Comm.ROLE_FROM[p[13] or ""],
         g = (p[14] == "m" or p[14] == "f") and p[14] or nil,
+        ni = tonumber(p[16]), kc = not tonumber(p[16]) and p[16] and p[16]:match("^%u+$") or nil,
     }, p[15] == "w"
 end
 
-function Comm.EncodeDuel(d)
+function Comm.EncodeNpc(e, answer)
+    return table.concat({ answer and "X" or "K", tostring(e.id), tostring(e.at), Clean(e.name, Comm.TEXT_LEN) }, "|")
+end
+
+function Comm.DecodeNpc(msg)
+    local id, at, name = msg:match("^[KX]|(%d+)|(%d+)|(.+)$")
+    if not id then return nil end
+    return { id = tonumber(id), at = tonumber(at), name = name }
+end
+
+function Comm.EncodeDuel(d, answer)
     return table.concat({ "D", Clean(d.by, Comm.NAME_LEN), Clean(d.w, Comm.NAME_LEN), Clean(d.l, Comm.NAME_LEN), d.k,
-        tostring(d.t), tostring(d.wl or ""), tostring(d.ll or "") }, "|")
+        tostring(d.t), tostring(d.wl or ""), tostring(d.ll or "") }, "|") .. (answer and "|r" or "")
 end
 
 -- Only a report by one of the two duelists counts.
@@ -163,7 +188,7 @@ function Comm.DecodeDuel(msg)
     local by, w, l, t = ns.ShortName(p[2]), ns.ShortName(p[3]), ns.ShortName(p[4]), tonumber(p[6])
     if not by or not w or not l or not t or w == l then return nil end
     if not ns.SameChar(by, w) and not ns.SameChar(by, l) then return nil end
-    return { by = by, w = w, l = l, k = p[5], t = t, wl = tonumber(p[7]), ll = tonumber(p[8]) }
+    return { by = by, w = w, l = l, k = p[5], t = t, wl = tonumber(p[7]), ll = tonumber(p[8]) }, p[9] == "r"
 end
 
 -- "V|a=3:1790000000:1790000900,b=1:1790000500:0" split over as many messages as needed.
@@ -258,10 +283,15 @@ local function Build(item)
         if not r then return nil end
         return Comm.EncodeRecord(item.record.kind or "R", owner, r, item.record.wait)
     end
+    if item.npc then
+        local h = heard["K/" .. item.npc.name]
+        if item.relay and h and h >= item.queued then return nil end -- someone else sent it
+        return Comm.EncodeNpc(item.npc, item.relay)
+    end
     if item.duel then
         local h = heard["D/" .. ns.Data.DuelKey(item.duel)]
         if item.relay and h and h >= item.queued then return nil end -- someone else sent it
-        return Comm.EncodeDuel(item.duel)
+        return Comm.EncodeDuel(item.duel, item.relay)
     end
     if item.stat then
         local owner = item.stat.owner
@@ -303,6 +333,7 @@ pacer:SetScript("OnUpdate", function()
                     echoes[msg] = (echoes[msg] or 0) + 1
                     if item.record then heard[item.record.owner .. "/" .. item.record.t] = now end
                     if item.duel then heard["D/" .. ns.Data.DuelKey(item.duel)] = now end
+                    if item.npc then heard["K/" .. item.npc.name] = now end
                     local sp = item.stat and ns.Book().players[item.stat.owner]
                     if sp and sp.stat then heard["S/" .. item.stat.owner .. "/" .. sp.stat.at] = now end
                 end
@@ -334,6 +365,20 @@ function Comm.SendRecord(owner, t, kind, relay, wait)
 end
 
 function Comm.SendDuel(d) Push({ duel = d }) end
+
+function Comm.SendNpc(name, id, at) Push({ npc = { name = name, id = id, at = at } }) end
+
+-- Someone holds `count` numbers, the newest from `latest`, and is complete up to `from` (the newest
+-- answer it got; a number heard live says nothing about older ones it missed while offline). Nothing
+-- to add: stay quiet. Oldest first from `from`; the next login gets the rest.
+function Comm.AnswerNpcs(from, count, latest)
+    local book = ns.Book()
+    local mine, newest = ns.Data.NpcSummary(book)
+    if mine <= count and newest <= latest then return end
+    for _, e in ipairs(ns.Data.NpcsFrom(book, from, Comm.NPC_SYNC_MAX)) do
+        Push({ npc = e, relay = true, notBefore = GetTime() + math.random() * Comm.RELAY_JITTER })
+    end
+end
 
 -- Someone asks for the duel reports after `after`: the oldest first, so the next login gets the rest.
 function Comm.AnswerDuels(after)
@@ -502,11 +547,29 @@ function Comm.OnMessage(prefix, msg, channel, sender)
             ns.Toast.HeardLine(owner, t, line)
         end
     elseif kind == "D" then
-        local d = Comm.DecodeDuel(msg)
+        local d, answer = Comm.DecodeDuel(msg)
         if d then
             heard["D/" .. ns.Data.DuelKey(d)] = GetTime()
             Seen(sender)
-            ns.Data.AddDuel(ns.Book(), d)
+            local book = ns.Book()
+            -- only an answer moves this: a duel heard live says nothing about older ones missed offline
+            if answer and d.t > (book.duelFrom or 0) then book.duelFrom = d.t end
+            ns.Data.AddDuel(book, d)
+        end
+    elseif kind == "K" or kind == "X" then
+        local e = Comm.DecodeNpc(msg)
+        if e then
+            heard["K/" .. e.name] = GetTime()
+            Seen(sender)
+            local book = ns.Book()
+            if kind == "X" and e.at > (book.npcFrom or 0) then book.npcFrom = e.at end
+            if ns.Data.LearnNpc(book, e.name, e.id, e.at) then ns.Changed() end
+        end
+    elseif kind == "J" then
+        local from, count, latest = msg:match("^J|(%d+)|(%d+)|(%d+)$")
+        if from then
+            Seen(sender)
+            Comm.AnswerNpcs(tonumber(from), tonumber(count), tonumber(latest))
         end
     elseif kind == "Q" then
         local after = tonumber(msg:match("^Q|(%d+)$"))
@@ -609,9 +672,11 @@ function Comm.HeardUpdateClaim(version)
     if ns.db and ns.GuildName() then SeenVersion(ns.Book(), version) end
 end
 
+-- What this version brings, for the line in guild chat. Change it with each release.
+Comm.UPDATE_NEWS = "for a brand new window with gravestones and killer portraits"
 function Comm.UpdateLine()
-    return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version"
-        .. " so your guildies can mentally support you when you die: CurseForge app or " .. ns.DOWNLOAD)
+    return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version "
+        .. Comm.UPDATE_NEWS .. ": CurseForge app or " .. ns.DOWNLOAD)
 end
 
 -- A saved Health report from before this session: another guildie on this version or newer.
@@ -707,7 +772,9 @@ local function TrySync()
     synced = guild
     sessionStart = sessionStart or ns.Now()
     Comm.SendVector()
-    Push({ msg = "Q|" .. ns.Data.LatestDuel(ns.Book()) })
+    Push({ msg = "Q|" .. (ns.Book().duelFrom or 0) })
+    local npcCount, npcLatest = ns.Data.NpcSummary(ns.Book())
+    Push({ msg = "J|" .. (ns.Book().npcFrom or 0) .. "|" .. npcCount .. "|" .. npcLatest })
     Comm.SendHealth()
     if ns.Repair then ns.Repair.SendMine() end
     local wait = Comm.UPDATE_WAIT + math.random() * Comm.RELAY_JITTER

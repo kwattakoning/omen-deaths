@@ -6,13 +6,79 @@
 --            k = killer name, s = spell or cause, b = raid boss of the fight it happened in (v0.8.7),
 --            r = role: "tank", "healer", "dps" (v0.8.9, nil = unknown),
 --            g = gender: "m", "f" (v0.9.0, for the death sound; nil = unknown),
---            kt = colour of the killer's level: "skull", "red", "gray" (own deaths only, not sent) }
+--            kt = colour of the killer's level: "skull", "red", "gray" (own deaths only, not sent),
+--            ni = NPC number of the killer, kc = class of a player killer ("PLAYER" = class unknown) (v0.9.8) }
 -- A death is known by its owner and its second (t): nobody dies twice in one second.
 local _, ns = ...
 local Data = {}
 ns.Data = Data
 
-local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b", "r", "g" }
+local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b", "r", "g", "ni", "kc" }
+
+-- Killers from before 0.9.8 have no NPC number. book.npcs[name] = { id, at } holds the numbers learned
+-- by seeing that NPC in the game (target, mouseover, nameplate). Only killers still lacking one are
+-- looked for: `wanted` is built once per book and kept up to date, so a nameplate costs one table look-up.
+local wantedBook, wanted, haveKiller
+
+local function Wanted(book)
+    if wantedBook == book then return wanted end
+    wantedBook, wanted, haveKiller = book, {}, {}
+    for _, p in pairs(book.players) do
+        for _, r in pairs(p.deaths) do
+            if r.k then
+                if r.ni or r.kc then haveKiller[r.k] = true else wanted[r.k] = true end
+            end
+        end
+    end
+    for name in pairs(haveKiller) do wanted[name] = nil end
+    for name in pairs(book.npcs or {}) do wanted[name] = nil end
+    return wanted
+end
+
+function Data.NoteKiller(book, r)
+    if wantedBook ~= book or not r.k then return end
+    if r.ni or r.kc then
+        haveKiller[r.k] = true
+        wanted[r.k] = nil
+    elseif not haveKiller[r.k] and not (book.npcs and book.npcs[r.k]) then
+        wanted[r.k] = true
+    end
+end
+
+function Data.NeedsNpc(book, name) return Wanted(book)[name] == true end
+
+-- True when this name was not known yet.
+function Data.LearnNpc(book, name, id, at)
+    if type(name) ~= "string" or name == "" or type(id) ~= "number" or type(at) ~= "number" then return false end
+    book.npcs = type(book.npcs) == "table" and book.npcs or {}
+    if book.npcs[name] then return false end
+    book.npcs[name] = { id = id, at = at }
+    if wantedBook == book then wanted[name] = nil end
+    return true
+end
+
+function Data.NpcSummary(book)
+    local count, latest = 0, 0
+    for _, e in pairs(book.npcs or {}) do
+        count = count + 1
+        if e.at > latest then latest = e.at end
+    end
+    return count, latest
+end
+
+-- Learned at or after `from`, oldest first (at most `max`): { name, id, at }.
+function Data.NpcsFrom(book, from, max)
+    local list = {}
+    for name, e in pairs(book.npcs or {}) do
+        if e.at >= from then list[#list + 1] = { name = name, id = e.id, at = e.at } end
+    end
+    table.sort(list, function(a, b)
+        if a.at ~= b.at then return a.at < b.at end
+        return a.name < b.name
+    end)
+    if max then for i = #list, max + 1, -1 do list[i] = nil end end
+    return list
+end
 
 -- Adds or completes a record. `authoritative` = the owner sent it, so it may overwrite.
 -- Returns "new", "updated" or nil (nothing changed).
@@ -29,6 +95,7 @@ function Data.Add(book, owner, rec, authoritative)
         local copy = { t = rec.t }
         for _, f in ipairs(FIELDS) do copy[f] = rec[f] end
         p.deaths[rec.t] = copy
+        Data.NoteKiller(book, copy)
         return "new"
     end
     local changed = false
@@ -39,6 +106,7 @@ function Data.Add(book, owner, rec, authoritative)
             changed = true
         end
     end
+    if changed then Data.NoteKiller(book, old) end
     return changed and "updated" or nil
 end
 
@@ -350,6 +418,8 @@ function Data.Killers(book, period, scope, now)
         row.count = row.count + 1
         row.victims[name] = (row.victims[name] or 0) + 1
         if not row.last or r.t > row.last.t then row.last = r end
+        -- what the killer is, from any death that knows it (deaths before 0.9.8 do not)
+        row.ni, row.kc = row.ni or r.ni, row.kc or r.kc
     end)
     if UsesStats(period, scope) then
         for _, row in ipairs(Data.Leaderboard(book, period, scope, now)) do
@@ -362,7 +432,11 @@ function Data.Killers(book, period, scope, now)
         end
     end
     local list = {}
-    for _, row in pairs(by) do list[#list + 1] = row end
+    for _, row in pairs(by) do
+        local learned = book.npcs and book.npcs[row.name]
+        if learned and not row.ni and not row.kc then row.ni = learned.id end
+        list[#list + 1] = row
+    end
     table.sort(list, function(a, b)
         if Tail(a.name) ~= Tail(b.name) then return Tail(a.name) < Tail(b.name) end
         if a.count ~= b.count then return a.count > b.count end

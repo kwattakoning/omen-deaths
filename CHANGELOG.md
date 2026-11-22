@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.8
+- Killers get a face: NPCs in the top 3 show their portrait, and falls, lava, fire, drowning, fatigue and slime each have their own icon. Killers from before this update get theirs as soon as a guildie with this version comes across them
+- A brand new window in the game's own style, with icon tabs on the side and the top 3 on real gravestones. Prefer the old one? Type /omen newui
+- The Awards tab now shows last week's winners and who is on course this week
+- New tabs, still under construction: Duels and Custom Messages
+- Fixes: long text no longer runs off a gravestone, and duel results missed while offline now arrive
+
 ## 0.9.7
 - Behind the scenes, nothing changes in your game: the result of a duel between two guildies is now shared with the guild, to test a future Omen duel ranking
 

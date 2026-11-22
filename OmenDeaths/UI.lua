@@ -489,8 +489,10 @@ local function TopVictims(victims)
     for i = 1, math.min(3, #list) do names[i] = list[i].name end
     return table.concat(names, ", ") .. (#list > 3 and ", ..." or "")
 end
+UI.TopVictims = TopVictims -- also for the new window
 
 function UI.Refresh()
+    if ns.NewUI then ns.NewUI.Refresh() end
     if not frame or not frame:IsShown() then return end
     local book, now = ns.Book(), ns.Now()
     local scopes, index = UI.Scopes()
@@ -628,8 +630,12 @@ function UI.Refresh()
     frame.quip.update = update
 end
 
+-- 0.9.8: with /omen newui on, every way in (minimap, /omen, a click on the popup) opens the new window.
+local function UseNew() return ns.db and ns.db.settings.newUI == true and ns.NewUI end
+
 function UI.Show()
     if not ns.db then return end
+    if UseNew() then return ns.NewUI.Show() end
     if not frame then Build() end
     frame.quip:SetText(QUIPS[math.random(#QUIPS)])
     frame:Show()
@@ -637,6 +643,7 @@ function UI.Show()
 end
 
 function UI.Toggle()
+    if UseNew() then return ns.NewUI.Toggle() end
     if frame and frame:IsShown() then frame:Hide() else UI.Show() end
 end
 
@@ -653,6 +660,15 @@ function UI.Slash(msg)
         ns.db.settings.autoRepair = not ns.db.settings.autoRepair
         ns.Print("Auto repair " .. (ns.db.settings.autoRepair and "on" or "off") .. ".")
         UI.Refresh()
+        return
+    end
+    if msg == "newui" then
+        if not ns.db then return end
+        ns.db.settings.newUI = not ns.db.settings.newUI
+        if frame then frame:Hide() end
+        if ns.NewUI then ns.NewUI.Hide() end
+        ns.Print((ns.db.settings.newUI and "New window on" or "Old window back") .. ". Switch with /omen newui.")
+        UI.Show()
         return
     end
     if msg == "health" then

@@ -18,7 +18,7 @@ This link always gives the newest version. The addon tells you in-game when a ne
 - Leaderboard for Today, This Week, This Month and All Time, per place: Everywhere, Open World,
   Dungeons, Raids (each raid and each raid boss on its own) and Battlegrounds
 - All Time also counts the deaths from before you installed the addon (from the game's own statistics)
-- Killers: which mobs (and falls) kill us the most
+- Killers: which mobs (and falls) kill us the most, with NPC portraits in the top 3
 - A funny line in guild chat when you die, fitting how you died: a fall, lava, your role in a dungeon,
   a mob way above your level or a gray one. Die the same way again and it gets worse: streaks stand out
   with [3x STREAK] up front. Popups show the same line as guild chat.
@@ -34,7 +34,7 @@ This link always gives the newest version. The addon tells you in-game when a ne
 - Optional sound when a guildie dies: the human death scream, male or female
 - Only shows players who are in the guild now
 
-Open it with `/omen` or the minimap button.
+Open it with `/omen` or the minimap button. Prefer the old window? Type `/omen newui`.
 
 ## Install
 

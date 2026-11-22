@@ -145,6 +145,19 @@ function Death.KillerTier(guid, tr)
     tr.level = tr.level .. ", no colour"
 end
 
+-- What the killer is, from its GUID (0.9.8, for its portrait on the Killers tab). Measured in the
+-- recap: "Creature-0-6858-2970-21-258804-A544C1ADC6", the sixth part is the NPC number (18 of 19
+-- killers; the other was a player). Returns the NPC number, or nil and the class of a player.
+function Death.KillerKind(guid)
+    if type(guid) ~= "string" then return end
+    local npc = guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-") or guid:match("^Vehicle%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+    if npc then return tonumber(npc) end
+    if guid:match("^Player%-") then
+        local _, class = ns.Call(GetPlayerInfoByGUID, guid)
+        return nil, type(class) == "string" and class ~= "" and class or "PLAYER"
+    end
+end
+
 function Death.ReadKiller(tr, deathT)
     tr = tr or {}
     local meter, recap = C_DamageMeter, C_DeathRecap
@@ -234,7 +247,9 @@ function Death.ReadKiller(tr, deathT)
         tr.maxHealth = Seen(max)
         oneShot = type(max) == "number" and max > 0 and type(hp) == "number" and hp >= max or nil
     end
-    if killer or cause then return killer, cause, tier, oneShot end
+    local ni, kc
+    if killer then ni, kc = Death.KillerKind(ns.Safe(blow.sourceGUID)) end
+    if killer or cause then return killer, cause, tier, oneShot, ni, kc end
 end
 
 -- The death is complete (killer known, or given up on): time for the guild chat line.
@@ -252,7 +267,7 @@ end
 local function TryKiller(final, why)
     if not pending then return end
     local tr = { why = why or "?" }
-    local killer, cause, tier, oneShot = Death.ReadKiller(tr, pending.t)
+    local killer, cause, tier, oneShot, ni, kc = Death.ReadKiller(tr, pending.t)
     local e = pending.log
     if e then
         tr.after = ns.Now() - pending.t -- seconds after the death
@@ -270,6 +285,8 @@ local function TryKiller(final, why)
             -- only who died knows it; the line and popup of others go without it
             r.kt = tier
             r.os = oneShot
+            r.ni, r.kc = ni, kc
+            ns.Data.NoteKiller(book, r)
             if pending.sent then ns.Comm.SendRecord(pending.owner, pending.t, "R") end
             ns.Changed()
         end
@@ -453,5 +470,25 @@ end)
 for _, event in ipairs({ "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED", "PLAYER_REGEN_ENABLED" }) do
     ns.On(event, function() TryKiller(false, event) end)
 end
+
+-- A killer from before 0.9.8 has no NPC number. Whoever sees it in the game (target, mouseover,
+-- nameplate) learns the number and tells the guild, so its portrait comes without another death.
+function Death.SeeUnit(unit)
+    if not ns.db or not unit or not ns.GuildName() then return end
+    local name = ns.Call(UnitName, unit)
+    if type(name) ~= "string" then return end
+    local book = ns.Book()
+    if not ns.Data.NeedsNpc(book, name) then return end
+    local npc = Death.KillerKind(ns.Call(UnitGUID, unit))
+    if type(npc) ~= "number" then return end
+    local at = ns.Now()
+    if ns.Data.LearnNpc(book, name, npc, at) then
+        ns.Comm.SendNpc(name, npc, at)
+        ns.Changed()
+    end
+end
+ns.On("PLAYER_TARGET_CHANGED", function() Death.SeeUnit("target") end)
+ns.On("UPDATE_MOUSEOVER_UNIT", function() Death.SeeUnit("mouseover") end)
+ns.On("NAME_PLATE_UNIT_ADDED", function(unit) Death.SeeUnit(ns.Safe(unit)) end)
 
 Death.TryKiller = TryKiller
