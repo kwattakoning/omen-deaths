@@ -42,6 +42,44 @@ function Data.Add(book, owner, rec, authoritative)
     return changed and "updated" or nil
 end
 
+-- Guild duels as reported (0.9.7, measurement for a duel ranking). Every report is kept apart, also
+-- when both duelists report the same duel: comparing them is what this measures.
+-- KEEP 200: not measured, no guild duel seen yet (reports are about 100 bytes each).
+Data.DUEL_KEEP = 200
+function Data.DuelKey(d) return d.by .. "/" .. d.t .. "/" .. d.w .. "/" .. d.l end
+
+function Data.AddDuel(book, d)
+    book.duels = type(book.duels) == "table" and book.duels or {}
+    local key = Data.DuelKey(d)
+    if book.duels[key] then return false end
+    book.duels[key] = { by = d.by, w = d.w, l = d.l, k = d.k, t = d.t, wl = d.wl, ll = d.ll }
+    local list = Data.DuelsAfter(book, -1)
+    for i = 1, #list - Data.DUEL_KEEP do book.duels[Data.DuelKey(list[i])] = nil end
+    return true
+end
+
+-- Reports newer than `after`, oldest first (at most `max`).
+function Data.DuelsAfter(book, after, max)
+    local list = {}
+    for _, d in pairs(book.duels or {}) do
+        if d.t > after then list[#list + 1] = d end
+    end
+    table.sort(list, function(a, b)
+        if a.t ~= b.t then return a.t < b.t end
+        return Data.DuelKey(a) < Data.DuelKey(b)
+    end)
+    if max then for i = #list, max + 1, -1 do list[i] = nil end end
+    return list
+end
+
+function Data.LatestDuel(book)
+    local latest = 0
+    for _, d in pairs(book.duels or {}) do
+        if d.t > latest then latest = d.t end
+    end
+    return latest
+end
+
 -- The game's own "Total deaths" statistic of a player: { total, at = server time it was read,
 -- bg = of those, deaths in battlegrounds (nil = not known, sent by v0.8.4 and later) }.
 -- Counts from the character's first day, so it covers deaths from before the addon.

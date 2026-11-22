@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.7
+- Behind the scenes, nothing changes in your game: the result of a duel between two guildies is now shared with the guild, to test a future Omen duel ranking
+
 ## 0.9.6
 - The popup for a guildie's death now shows the same line as guild chat. Both of you need this version; if the killer is not known right away, the popup waits for the line
 - Many more lines per class, new lines for class and role together, and role lines in raids and the open world too

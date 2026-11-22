@@ -12,6 +12,8 @@
 --   U|version                                                            "I post the new-version line" (v0.8.7)
 --   H|owner|version|logged|missed|step|errors|lastError                  how my addon is doing (Health.lua)
 --   T|owner|t|named|week|text                                            the line I chose for my death (0.9.6), so popups match guild chat
+--   D|reporter|winner|loser|K or F|t|winnerLevel|loserLevel              a guild duel (0.9.7, measurement; F = fled)
+--   Q|latest                                                             "send me the duel reports after this time"
 --
 -- Whoever holds more of a player's deaths than the asker sends them. Everyone hears every
 -- message on the guild channel, so a record somebody else already sent is not sent again.
@@ -34,6 +36,10 @@ Comm.CPS, Comm.BURST, Comm.OVERHEAD = 800, 4000, 40
 -- Records others may also send wait a random 0..RELAY_JITTER seconds, so that the first
 -- sender is usually heard by the rest before they start (not measured, see CONTEXT.md).
 Comm.RELAY_JITTER = 3
+-- Duel reports per answer: what fits in one burst, so a sync never builds a queue (the stutter of
+-- 0.9.4). A report is at most 98 bytes: "D" + 3 names of 25 + K/F + time 10 + 2 levels of 2 + 7 separators.
+Comm.DUEL_MSG_MAX = 98
+Comm.DUEL_SYNC_MAX = math.floor(Comm.BURST / (Comm.DUEL_MSG_MAX + Comm.OVERHEAD))
 
 Comm.peers = {}  -- name -> { version, seen = GetTime() }
 local heard = {} -- "owner/t" -> GetTime() a record was last heard on the channel
@@ -145,6 +151,21 @@ function Comm.DecodeRecord(msg)
     }, p[15] == "w"
 end
 
+function Comm.EncodeDuel(d)
+    return table.concat({ "D", Clean(d.by, Comm.NAME_LEN), Clean(d.w, Comm.NAME_LEN), Clean(d.l, Comm.NAME_LEN), d.k,
+        tostring(d.t), tostring(d.wl or ""), tostring(d.ll or "") }, "|")
+end
+
+-- Only a report by one of the two duelists counts.
+function Comm.DecodeDuel(msg)
+    local p = Split(msg)
+    if p[1] ~= "D" or #p < 8 or (p[5] ~= "K" and p[5] ~= "F") then return nil end
+    local by, w, l, t = ns.ShortName(p[2]), ns.ShortName(p[3]), ns.ShortName(p[4]), tonumber(p[6])
+    if not by or not w or not l or not t or w == l then return nil end
+    if not ns.SameChar(by, w) and not ns.SameChar(by, l) then return nil end
+    return { by = by, w = w, l = l, k = p[5], t = t, wl = tonumber(p[7]), ll = tonumber(p[8]) }
+end
+
 -- "V|a=3:1790000000:1790000900,b=1:1790000500:0" split over as many messages as needed.
 -- The third number is when the player's game statistic was read (0 = not known); v0.1
 -- clients read only the first two.
@@ -237,6 +258,11 @@ local function Build(item)
         if not r then return nil end
         return Comm.EncodeRecord(item.record.kind or "R", owner, r, item.record.wait)
     end
+    if item.duel then
+        local h = heard["D/" .. ns.Data.DuelKey(item.duel)]
+        if item.relay and h and h >= item.queued then return nil end -- someone else sent it
+        return Comm.EncodeDuel(item.duel)
+    end
     if item.stat then
         local owner = item.stat.owner
         local p = book.players[owner]
@@ -276,6 +302,7 @@ pacer:SetScript("OnUpdate", function()
                     budget = budget - cost
                     echoes[msg] = (echoes[msg] or 0) + 1
                     if item.record then heard[item.record.owner .. "/" .. item.record.t] = now end
+                    if item.duel then heard["D/" .. ns.Data.DuelKey(item.duel)] = now end
                     local sp = item.stat and ns.Book().players[item.stat.owner]
                     if sp and sp.stat then heard["S/" .. item.stat.owner .. "/" .. sp.stat.at] = now end
                 end
@@ -304,6 +331,15 @@ function Comm.SendRaw(msg) Push({ msg = msg }) end
 function Comm.SendRecord(owner, t, kind, relay, wait)
     local delay = relay and math.random() * Comm.RELAY_JITTER or 0
     Push({ record = { owner = owner, t = t, kind = kind, wait = wait }, relay = relay, notBefore = GetTime() + delay })
+end
+
+function Comm.SendDuel(d) Push({ duel = d }) end
+
+-- Someone asks for the duel reports after `after`: the oldest first, so the next login gets the rest.
+function Comm.AnswerDuels(after)
+    for _, d in ipairs(ns.Data.DuelsAfter(ns.Book(), after, Comm.DUEL_SYNC_MAX)) do
+        Push({ duel = d, relay = true, notBefore = GetTime() + math.random() * Comm.RELAY_JITTER })
+    end
 end
 
 function Comm.SendLine(owner, t, text, named, week)
@@ -465,6 +501,19 @@ function Comm.OnMessage(prefix, msg, channel, sender)
             Seen(sender)
             ns.Toast.HeardLine(owner, t, line)
         end
+    elseif kind == "D" then
+        local d = Comm.DecodeDuel(msg)
+        if d then
+            heard["D/" .. ns.Data.DuelKey(d)] = GetTime()
+            Seen(sender)
+            ns.Data.AddDuel(ns.Book(), d)
+        end
+    elseif kind == "Q" then
+        local after = tonumber(msg:match("^Q|(%d+)$"))
+        if after then
+            Seen(sender)
+            Comm.AnswerDuels(after)
+        end
     elseif kind == "S" then
         local p = Split(msg)
         local owner, total, at = ns.ShortName(p[2]), tonumber(p[3]), tonumber(p[4])
@@ -594,6 +643,16 @@ function Comm.UpdateClaim()
     if seen then return "U|" .. seen end
 end
 
+-- A guild member by name: the name as the roster has it, and their level. nil when not in the guild.
+function Comm.RosterMember(wanted)
+    local n = ns.Call(GetNumGuildMembers) or 0
+    for i = 1, n do
+        local name, _, _, level = ns.Call(GetGuildRosterInfo, i)
+        name = ns.ShortName(name)
+        if name and ns.SameChar(name, wanted) then return name, type(level) == "number" and level or nil end
+    end
+end
+
 -- Who has the addon and is online, by first name in a fixed order: every client gets the same list,
 -- so they can take turns (the boss summary, 0.9.6). First names: a sender's name may lack the surname.
 function Comm.OnlineOrder()
@@ -648,6 +707,7 @@ local function TrySync()
     synced = guild
     sessionStart = sessionStart or ns.Now()
     Comm.SendVector()
+    Push({ msg = "Q|" .. ns.Data.LatestDuel(ns.Book()) })
     Comm.SendHealth()
     if ns.Repair then ns.Repair.SendMine() end
     local wait = Comm.UPDATE_WAIT + math.random() * Comm.RELAY_JITTER

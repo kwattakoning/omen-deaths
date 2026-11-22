@@ -1,5 +1,5 @@
--- Omen Deaths: measurements only (0.9.5). Nothing is shown in the game and nothing is sent; the
--- results stay in OmenDeathsDB and tools\check-data.js prints them.
+-- Omen Deaths: measurements only (0.9.5). Nothing is shown in the game; the results are in
+-- OmenDeathsDB and tools\check-data.js prints them. Sent: only the result of a guild duel (0.9.7).
 --
 -- 1) Damage meter (boss fights plan, phase 0 in CONTEXT.md): after each fight, what the game's meter
 --    gives for damage taken, avoidable damage taken and deaths. Per type: the session, how many
@@ -190,12 +190,30 @@ for _, ev in ipairs(Probe.DUEL_EVENTS) do
     end)
 end
 
+-- 0.9.7 (user: everyone should be able to measure, not only next to me): a duel I fought myself
+-- against a guildie goes to the guild. Bystanders and duels with strangers report nothing.
+Probe.DUEL_CODE = { knockout = "K", retreat = "F" }
+function Probe.ReportDuel(winner, loser, kind)
+    local me = ns.MyName()
+    if not me or not ns.GuildName() then return end
+    local iWon, iLost = ns.SameChar(winner, me), ns.SameChar(loser, me)
+    if iWon == iLost then return end
+    local other, otherLevel = ns.Comm.RosterMember(iWon and loser or winner)
+    if not other then return end
+    local myLevel = ns.Call(UnitLevel, "player")
+    if type(myLevel) ~= "number" then myLevel = nil end
+    local d = { by = me, w = iWon and me or other, l = iWon and other or me, k = Probe.DUEL_CODE[kind], t = ns.Now(),
+        wl = iWon and myLevel or otherLevel, ll = iWon and otherLevel or myLevel }
+    if ns.Data.AddDuel(ns.Book(), d) then ns.Comm.SendDuel(d) end
+end
+
 function Probe.System(text)
     if not (ns.db and ns.db.duelProbe) then return end
     local seen = Seen(text)
     local winner, loser, kind = Probe.DuelLine(text)
     if winner then
         DuelLog({ ev = "line", kind = kind, winner = winner, loser = loser })
+        Probe.ReportDuel(winner, loser, kind)
     elseif after > 0 then
         DuelLog({ ev = "system after", text = seen })
     end
