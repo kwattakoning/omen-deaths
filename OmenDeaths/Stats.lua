@@ -103,7 +103,172 @@ ns.On("PLAYER_ENTERING_WORLD", function()
         Stats.Read()
     end
 end)
+---------------------------------------------------------------------------
+-- Deathless (0.9.11, wish of the user): every 10 levels without ever dying an achievement in guild
+-- chat, each step bigger. The Hall of Fame tab ranks everyone who never died by level: 60 on top,
+-- you climb by staying alive and levelling. "Never died" = the game's own Total deaths minus the
+-- battleground deaths is 0 (the user: battlegrounds do not count, world pvp does). The statistic
+-- counts from the character's first day, so a run from before the addon counts.
+--
+-- Y|name|level|t|flag|class   my level while I never died; flag "m" = a step reached (fanfare),
+--                             else quiet (a level-up, login, an answer to a guildie's login)
+---------------------------------------------------------------------------
+Stats.DEATHLESS_STEP, Stats.DEATHLESS_TOP = 10, 60
+
+-- Deaths outside battlegrounds, read now; nil when the game does not give the numbers.
+function Stats.CleanDeaths()
+    local total = Stats.Number(ns.Call(GetStatistic, Stats.TOTAL_DEATHS))
+    if not total then return nil end
+    local bg = 0
+    for _, id in ipairs(Stats.BG_DEATHS) do
+        local n = Stats.Number(ns.Call(GetStatistic, id))
+        if not n then return nil end
+        bg = bg + n
+    end
+    return total - bg
+end
+
+-- book.deathless[name] = { lv = level, t = when that level was reached, c = class }
+function Stats.AddDeathless(book, name, lv, t, class)
+    book.deathless = book.deathless or {}
+    local e = book.deathless[name]
+    if e and (e.lv > lv or (e.lv == lv and e.t <= t)) then
+        if class and not e.c then e.c = class return true end
+        return false
+    end
+    book.deathless[name] = { lv = lv, t = t, c = class or (e and e.c) }
+    return true
+end
+
+-- Has this player died since (outside battlegrounds)? From the statistic and the deaths the addon saw.
+function Stats.HasDied(book, name)
+    local all = ns.Lines.AllTime({ t = ns.Now(), it = "none" }, name, book)
+    return all ~= nil and all > 0
+end
+
+-- The Hall of Fame: who never died, highest level first; the same level: who got there first.
+function Stats.Ladder(book)
+    local list = {}
+    for name, e in pairs(book and book.deathless or {}) do
+        if not Stats.HasDied(book, name) and (not ns.Data.Shown or ns.Data.Shown(name)) then
+            list[#list + 1] = { name = name, lv = e.lv, t = e.t, class = e.c }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.lv ~= b.lv then return a.lv > b.lv end
+        if a.t ~= b.t then return a.t < b.t end
+        return a.name < b.name
+    end)
+    return list
+end
+
+local function NeverDied(me, book)
+    if Stats.CleanDeaths() ~= 0 then return false end
+    -- a death the statistic has not counted yet (it is read out of combat) also ends the run
+    return not Stats.HasDied(book, me)
+end
+
+function Stats.Encode(name, lv, t, flag, class)
+    return table.concat({ "Y", name, tostring(lv), tostring(t), flag or "", class or "" }, "|")
+end
+
+local function MyClass()
+    local _, class = ns.Call(UnitClass, "player")
+    return type(class) == "string" and class or nil
+end
+
+-- My place on the ladder, now: kept and told to the guild (quiet). Out of combat only.
+function Stats.CheckMine(dingLevel)
+    if not ns.db or InCombat() or not ns.GuildName() then return end
+    local me = ns.MyName()
+    -- right after PLAYER_LEVEL_UP the game can still give the old level: the event's level counts
+    local level = ns.Call(UnitLevel, "player")
+    if type(dingLevel) == "number" and (type(level) ~= "number" or dingLevel > level) then level = dingLevel end
+    if not me or type(level) ~= "number" then return end
+    local book = ns.Book()
+    if not NeverDied(me, book) then
+        if book.deathless and book.deathless[me] then book.deathless[me] = nil ns.Changed() end
+        return
+    end
+    local e = book.deathless and book.deathless[me]
+    if not e or e.lv < level then
+        Stats.AddDeathless(book, me, level, ns.Now(), MyClass())
+        ns.Changed()
+    end
+    Stats.SendMine()
+    return level
+end
+
+-- A step reached: guild chat, the guild's popups, my own popup. Once per character and step.
+function Stats.Deathless(lv)
+    if not ns.db or not ns.GuildName() then return end
+    local me = ns.MyName()
+    if not me then return end
+    ns.db.deathless = ns.db.deathless or {}
+    local key = me .. "/" .. lv
+    if ns.db.deathless[key] then return end
+    local book = ns.Book()
+    if not NeverDied(me, book) then return end
+    local t = ns.Now()
+    ns.db.deathless[key] = t
+    Stats.AddDeathless(book, me, lv, t, MyClass())
+    local L = ns.Lines
+    local list = L.SETS.deathless[lv]
+    if ns.db.settings.guildChat and list then
+        local follow = lv == Stats.DEATHLESS_TOP and L.SETS.deathless60[math.random(#L.SETS.deathless60)] or nil
+        ns.Toast.Post("[Omen Deaths] " .. L.Render(list[math.random(#list)], me), false, "l",
+            follow and ("[Omen Deaths] " .. L.Render(follow, me)) or nil)
+    end
+    ns.Comm.SendRaw(Stats.Encode(me, lv, t, "m", MyClass()))
+    if ns.Toast.Deathless then ns.Toast.Deathless(me, lv) end
+    ns.Changed()
+end
+
+-- Level-ups come in combat too (a kill): the check waits until the fight is over, the statistic
+-- is read out of combat only (as Journey Tracker does).
+local dinged
+local function AfterDing()
+    local level = dinged
+    dinged = nil
+    if level % Stats.DEATHLESS_STEP == 0 and level <= Stats.DEATHLESS_TOP then Stats.Deathless(level) end
+    Stats.CheckMine(level)
+end
+ns.On("PLAYER_LEVEL_UP", function(level)
+    level = ns.Safe(level)
+    if type(level) ~= "number" then return end
+    dinged = level
+    if not InCombat() then AfterDing() end
+end)
+
+-- Mine at login and to a guildie who logs in (as Repair.SendMine): the ladder stays complete.
+function Stats.SendMine()
+    local me = ns.MyName()
+    local book = me and ns.GuildName() and ns.Book()
+    local e = book and book.deathless and book.deathless[me]
+    if e and not Stats.HasDied(book, me) then ns.Comm.SendRaw(Stats.Encode(me, e.lv, e.t, nil, e.c)) end
+end
+
+function Stats.Heard(msg, sender)
+    local p = {}
+    for piece in (msg .. "|"):gmatch("([^|]*)|") do p[#p + 1] = piece end
+    local name, lv, t, flag, class = p[2], tonumber(p[3]), tonumber(p[4]), p[5], p[6]
+    if p[1] ~= "Y" or not name or name == "" or not lv or not t or not ns.SameChar(name, sender) then return end
+    if lv < 1 or lv > Stats.DEATHLESS_TOP then return end
+    if name == ns.MyName() then return end
+    class = class and class:match("^%u+$") or nil
+    local book = ns.Book()
+    if Stats.AddDeathless(book, name, lv, t, class) then ns.Changed() end
+    if flag == "m" and lv % Stats.DEATHLESS_STEP == 0 and ns.Toast.Deathless then ns.Toast.Deathless(name, lv) end
+end
+
 -- after a fight, and after coming back from a death (the count has gone up by then)
 for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_UNGHOST", "PLAYER_ALIVE" }) do
-    ns.On(event, function() Stats.Read() end)
+    ns.On(event, function()
+        Stats.Read()
+        if event == "PLAYER_REGEN_ENABLED" and dinged then AfterDing() end
+    end)
 end
+ns.On("PLAYER_ENTERING_WORLD", function()
+    if C_Timer and C_Timer.After then C_Timer.After(Stats.LOGIN_DELAY + 1, Stats.CheckMine) end
+end)
+

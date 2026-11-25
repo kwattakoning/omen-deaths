@@ -10,6 +10,9 @@ NewUI.W, NewUI.H = 560, 620
 NewUI.ROWS, NewUI.ROW_H = 8, 34
 NewUI.GRASS_H = 20
 NewUI.TAB_SIZE, NewUI.TAB_GAP, NewUI.TAB_ICON = 40, 3, 50 -- as the game's side tab: 50 = the icon fills it
+-- 0.9.11: the tabs ran past the bottom of the window (user, 25-11-2026). The whole tab, art and
+-- icon, is scaled; 0.8 keeps 10 tabs in the window with room to spare.
+NewUI.TAB_SCALE = 0.8
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local LOGO = "Interface\\AddOns\\OmenDeaths\\OmenLogo"
@@ -29,11 +32,16 @@ local COL = {
 NewUI.TABS = {
     { id = "board", label = "Leaderboard", icon = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01", periods = true, scope = true },
     { id = "killers", label = "Killers", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", periods = true, scope = true },
-    { id = "duels", label = "Duels", icon = "Interface\\Icons\\Ability_DualWield" },
+    -- beta = only with /omen beta (25-11-2026, the user's choice: not finished yet)
+    { id = "duels", label = "Duels", icon = "Interface\\Icons\\Ability_DualWield", beta = true },
     { id = "repairs", label = "Repairs", icon = "Interface\\Icons\\Trade_BlackSmithing", periods = true },
     { id = "awards", label = "Awards", icon = "Interface\\Icons\\INV_Crown_01" },
+    -- Hall of Fame (0.9.11, wish of the user): everyone who never died, highest level on top
+    { id = "deathless", label = "Hall of Fame", icon = "Interface\\Icons\\Spell_Holy_Resurrection" },
+    { id = "raids", label = "Raids", icon = "Interface\\Icons\\INV_Misc_Map_01", beta = true },
+    { id = "raidadmin", label = "Raid Admin", icon = "Interface\\Icons\\INV_Misc_Key_03", owner = true, beta = true },
     { id = "health", label = "Health", icon = QUESTION, hidden = true },
-    { id = "custom", label = "Custom Messages", icon = "Interface\\Icons\\INV_Letter_15" },
+    { id = "custom", label = "Custom Messages", icon = "Interface\\Icons\\INV_Letter_15", beta = true },
     { id = "settings", label = "Settings", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
 }
 
@@ -65,6 +73,15 @@ local TOMB = {
 local TOMB_W = 150
 
 local frame, state
+
+-- The only one who sees Raid Admin and later chooses the raid admins (24-11-2026, the user's choice).
+NewUI.OWNER = "Kwatta Koning"
+function NewUI.Visible(def)
+    if def.id == "health" then return ns.db.settings.showHealth == true end
+    if def.beta and ns.db.settings.beta ~= true then return false end
+    if def.owner then return ns.MyName() == NewUI.OWNER end
+    return true
+end
 
 ---------------------------------------------------------------------------
 -- Small parts
@@ -120,6 +137,7 @@ local function NoTip() GameTooltip:Hide() end
 -- The game's own side tab (the Professions window): its frame, grid and bevelled corners.
 local function BuildTab(def)
     local b = CreateFrame("Frame", nil, frame, "LargeSideTabButtonTemplate")
+    b:SetScale(NewUI.TAB_SCALE)
     b.def = def
     b:EnableMouse(true)
     b.Icon:SetTexture(NewUI.Icon(def.icon))
@@ -641,6 +659,19 @@ function NewUI.Page(id, book, now)
         end
         page.message = #list == 0 and "No reports yet. Guildies need Omen Deaths 0.8.0 or newer." or nil
         page.left = ("Health: %d %s reported, %d with problems"):format(#list, #list == 1 and "player" or "players", bad)
+    elseif id == "deathless" then
+        local list = ns.Stats.Ladder(book)
+        ns.UI.list = list
+        local mine
+        for n, d in ipairs(list) do
+            page.items[n] = ClassItem(d, "Lvl " .. d.lv,
+                d.lv >= ns.Stats.DEATHLESS_TOP and "Deathless 60 · never died" or "Never died · still climbing", nil, n)
+            page.items[n].mark = "Still Alive #" .. n
+            if d.name == me then mine = n end
+        end
+        page.message = #list == 0 and "Nobody here yet. Everyone has died at least once. Typical." or nil
+        page.left = ("%d %s never died · stay alive and level up to climb"):format(#list, #list == 1 and "guildie has" or "guildies have")
+        page.right = "You: " .. (mine and ("#" .. mine) or "not on it") .. "  ·  " .. page.right
     elseif id == "awards" then
         local week = ns.Awards.WeekStart()
         local lastWeek = ns.Awards.Compute(book, week - ns.Awards.WEEK, week)
@@ -658,6 +689,16 @@ function NewUI.Page(id, book, now)
         for _ in pairs(book.duels or {}) do n = n + 1 end
         page.note = "The Omen duel ranking"
         page.building = "Duel your guildies to help test it.\n\nDuel reports received so far: " .. n
+        page.noBoard = true
+    elseif id == "raids" then
+        -- Raids gets its own title (24-11-2026, wish of the user); other tabs keep "Under Construction"
+        page.note = "Raid plans from your raid leader"
+        page.buildingTitle = "Coming soon..."
+        page.building = "...so you stop dying.\n\nYour raid leader puts the tactics and your own task for every boss here. You only have to read it."
+        page.noBoard = true
+    elseif id == "raidadmin" then
+        page.note = "Only you can see this tab"
+        page.building = "Soon you can choose here who may import the sign-ups and write raid plans."
         page.noBoard = true
     elseif id == "custom" then
         page.note = "Your own death lines"
@@ -799,7 +840,7 @@ end
 local function CurrentTab()
     for _, def in ipairs(NewUI.TABS) do
         if def.id == state.newTab then
-            if def.id ~= "health" or ns.db.settings.showHealth == true then return def end
+            if NewUI.Visible(def) then return def end
         end
     end
     state.newTab = "board"
@@ -809,14 +850,15 @@ end
 local function LayoutTabs(current)
     local previous
     for _, b in ipairs(frame.tabButtons) do
-        local shown = b.def.id ~= "health" or ns.db.settings.showHealth == true
+        local shown = NewUI.Visible(b.def)
         Show(b, shown)
         if shown then
             b:ClearAllPoints()
             if previous then
                 b:SetPoint("TOP", previous, "BOTTOM", 0, -NewUI.TAB_GAP)
             else
-                b:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -48)
+                -- offsets count in the tab's own scale: divided, so the first tab keeps its place
+                b:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2 / NewUI.TAB_SCALE, -48 / NewUI.TAB_SCALE)
             end
             previous = b
             b.active = b.def.id == current.id
@@ -851,6 +893,7 @@ function NewUI.Refresh()
     Show(frame.awardsPage, page.awards ~= nil)
     if page.awards then FillAwards(page.awards) end
     Show(frame.building, page.building ~= nil)
+    frame.building.title:SetText(page.buildingTitle or "Under Construction")
     frame.building.text:SetText(page.building or "")
     Show(frame.message, page.message ~= nil)
     frame.message:SetText(page.message or "")

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.11
+- New Hall of Fame tab: everyone who never died, ranked by level. Level 60 on top, stay alive and level up to climb
+- Deathless achievements: reach level 10, 20, 30, 40, 50 or 60 without ever dying and the guild hears it. Each step is bigger, level 60 gets the biggest popup. Battleground deaths do not count
+- Your very first death gets its own line, bigger after a longer deathless run
+- The death line now shows the level of the killer, as the game shows it: "Hogger (lvl 12)", "(lvl ??)" for a skull
+- Smaller tabs, so they all fit next to the window
+- Tabs that are not finished yet (Duels, Custom Messages, Raids) are hidden. Type /omen beta to see them
+- Behind the scenes, nothing changes in your game: in dungeons and raids the addon checks what raid tools the game allows, to build the Raids tab
+
 ## 0.9.10
 - New setting Guild repairs (off by default): choose if auto repair may pay from the guild bank. Off means you pay yourself
 - The Repairs board now only counts what players paid themselves

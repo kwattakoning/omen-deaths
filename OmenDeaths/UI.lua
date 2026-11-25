@@ -671,6 +671,22 @@ function UI.Slash(msg)
         UI.Show()
         return
     end
+    -- /omen beta shows or hides the tabs that are not finished (Duels, Raids, Custom Messages)
+    if msg == "beta" then
+        if not ns.db then return end
+        ns.db.settings.beta = not ns.db.settings.beta
+        -- names the beta tabs this character sees, so a missing one shows at once (Raid Admin: owner only)
+        local names = {}
+        if ns.NewUI and ns.db.settings.beta then
+            for _, def in ipairs(ns.NewUI.TABS) do
+                if def.beta and ns.NewUI.Visible(def) then names[#names + 1] = def.label end
+            end
+        end
+        ns.Print("Beta tabs " .. (ns.db.settings.beta and ("on: " .. table.concat(names, ", ")) or "off")
+            .. ". Switch with /omen beta.")
+        UI.Refresh()
+        return
+    end
     if msg == "health" then
         if not ns.db then return end
         ns.db.settings.showHealth = not ns.db.settings.showHealth

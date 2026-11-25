@@ -7,13 +7,15 @@
 --            r = role: "tank", "healer", "dps" (v0.8.9, nil = unknown),
 --            g = gender: "m", "f" (v0.9.0, for the death sound; nil = unknown),
 --            kt = colour of the killer's level: "skull", "red", "gray" (own deaths only, not sent),
---            ni = NPC number of the killer, kc = class of a player killer ("PLAYER" = class unknown) (v0.9.8) }
+--            ni = NPC number of the killer, kc = class of a player killer ("PLAYER" = class unknown) (v0.9.8),
+--            kl = level of the killer, -1 = "??" (v0.9.11, nil = unknown),
+--            fd = true: the character's very first death (v0.9.11) }
 -- A death is known by its owner and its second (t): nobody dies twice in one second.
 local _, ns = ...
 local Data = {}
 ns.Data = Data
 
-local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b", "r", "g", "ni", "kc" }
+local FIELDS = { "c", "l", "it", "id", "d", "z", "k", "s", "b", "r", "g", "ni", "kc", "kl", "fd" }
 
 -- Killers from before 0.9.8 have no NPC number. book.npcs[name] = { id, at } holds the numbers learned
 -- by seeing that NPC in the game (target, mouseover, nameplate). Only killers still lacking one are

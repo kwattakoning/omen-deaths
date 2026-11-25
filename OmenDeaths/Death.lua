@@ -111,16 +111,92 @@ function Death.FindUnit(guid)
     end
 end
 
+-- The killer is usually gone from the nameplates once you are dead: found in 3 of 18 deaths
+-- (measured 24-11-2026). So the level of every mob seen while alive is kept by GUID (only when
+-- the game shows the GUID: in dungeons it is secret). LEVEL_KEEP = 5 screens of 40 nameplates
+-- (not measured); past that the list starts again, an old mob is rarely the killer.
+Death.LEVEL_KEEP = 5 * Death.NAMEPLATES
+local levels, levelCount = {}, 0
+function Death.NoteLevel(unit)
+    local guid = ns.Call(UnitGUID, unit)
+    if type(guid) ~= "string" or guid == "" or levels[guid] then return end
+    local level = ns.Call(UnitLevel, unit)
+    if type(level) ~= "number" then return end
+    if levelCount >= Death.LEVEL_KEEP then levels, levelCount = {}, 0 end
+    levels[guid], levelCount = level, levelCount + 1
+end
+function Death.KnownLevel(guid) return type(guid) == "string" and levels[guid] or nil end
+ns.On("NAME_PLATE_UNIT_ADDED", function(unit) pcall(Death.NoteLevel, unit) end)
+ns.On("PLAYER_TARGET_CHANGED", function() pcall(Death.NoteLevel, "target") end)
+ns.On("UPDATE_MOUSEOVER_UNIT", function() pcall(Death.NoteLevel, "mouseover") end)
+
+-- In dungeons and raids the GUID is secret, so the killer cannot be found by it (24-11-2026).
+-- If the level itself is readable, the levels of the mobs in this fight are kept: when they all
+-- have the same level, that is the killer's level too. More than one level: unknown, no guess.
+local fightLevels -- level -> true, since the start of the current fight in an instance
+local function InInstance()
+    local it = Death.Where().it
+    return it == "party" or it == "raid"
+end
+function Death.NoteFightLevel(unit)
+    if not fightLevels then return end
+    if ns.Call(UnitCanAttack, "player", unit) == false or ns.Call(UnitIsPlayer, unit) == true then return end
+    local level = ns.Call(UnitLevel, unit)
+    if type(level) == "number" then fightLevels[level] = true end
+end
+function Death.FightLevel()
+    if not fightLevels then return end
+    local one
+    for level in pairs(fightLevels) do
+        if one then return end -- two levels: no guess
+        one = level
+    end
+    return one
+end
+ns.On("PLAYER_REGEN_DISABLED", function()
+    fightLevels = nil
+    if not InInstance() then return end
+    fightLevels = {}
+    for i = 1, Death.NAMEPLATES do pcall(Death.NoteFightLevel, "nameplate" .. i) end
+    pcall(Death.NoteFightLevel, "target")
+end)
+ns.On("NAME_PLATE_UNIT_ADDED", function(unit) if fightLevels then pcall(Death.NoteFightLevel, unit) end end)
+
+-- The colour from a level alone, when the killer is no longer on screen.
+local function TierOf(level, tr)
+    if level == -1 then return "skull" end
+    local colors = QuestDifficultyColors
+    if type(level) ~= "number" or type(colors) ~= "table" then return end
+    local color = ns.Call(GetCreatureDifficultyColor, level)
+    if type(color) ~= "table" then return end
+    tr.level = tr.level .. ", colour " .. (color == colors.impossible and "impossible" or color == colors.trivial and "trivial" or "other")
+    if color == colors.impossible then return "red" end
+    if color == colors.trivial then return "gray" end
+end
+
+-- Returns the colour ("skull", "red", "gray" or nil) and the level (-1 = "??", nil = unknown).
 function Death.KillerTier(guid, tr)
     tr = tr or {}
     local unit = Death.FindUnit(guid)
     if not unit then
-        tr.level = "not found"
+        local known = Death.KnownLevel(guid)
+        if known then
+            tr.level = "remembered level " .. known
+            return TierOf(known, tr), known
+        end
+        local fight = InInstance() and Death.FightLevel()
+        tr.level = fight and ("every mob in the fight level " .. fight) or "not found"
+        if fight then return TierOf(fight, tr), fight end
         return
     end
     local level = ns.Call(UnitLevel, unit)
     tr.level = unit .. " level " .. Seen(level)
-    if level == -1 then return "skull" end
+    if type(level) ~= "number" then level = Death.KnownLevel(guid) end
+    if level == -1 then return "skull", -1 end
+    return Death.TierAt(unit, level, tr), level
+end
+
+function Death.TierAt(unit, level, tr)
     local pi, enum = C_PlayerInfo, Enum and Enum.RelativeContentDifficulty
     if pi and pi.GetContentDifficultyCreatureForPlayer and type(enum) == "table" then
         local d = ns.Call(pi.GetContentDifficultyCreatureForPlayer, unit)
@@ -235,8 +311,8 @@ function Death.ReadKiller(tr, deathT)
     if not cause and type(env) == "string" and env ~= "" then cause = Title(env) end
     if type(killer) ~= "string" or killer == "" then killer = nil end
     if type(cause) ~= "string" or cause == "" then cause = nil end
-    local tier
-    if killer then tier = Death.KillerTier(ns.Safe(blow.sourceGUID), tr) end
+    local tier, level
+    if killer then tier, level = Death.KillerTier(ns.Safe(blow.sourceGUID), tr) end
     -- one hit from full health (0.9.0): health before the blow at least the recap's max health.
     -- Measured 10-11-2026: after death the game gives a max a bit lower than the real one
     -- (1406 vs 1526 before a fall from full), every fall from full health had currentHP >= max.
@@ -249,7 +325,7 @@ function Death.ReadKiller(tr, deathT)
     end
     local ni, kc
     if killer then ni, kc = Death.KillerKind(ns.Safe(blow.sourceGUID)) end
-    if killer or cause then return killer, cause, tier, oneShot, ni, kc end
+    if killer or cause then return killer, cause, tier, oneShot, ni, kc, level end
 end
 
 -- The death is complete (killer known, or given up on): time for the guild chat line.
@@ -267,7 +343,7 @@ end
 local function TryKiller(final, why)
     if not pending then return end
     local tr = { why = why or "?" }
-    local killer, cause, tier, oneShot, ni, kc = Death.ReadKiller(tr, pending.t)
+    local killer, cause, tier, oneShot, ni, kc, level = Death.ReadKiller(tr, pending.t)
     local e = pending.log
     if e then
         tr.after = ns.Now() - pending.t -- seconds after the death
@@ -286,6 +362,7 @@ local function TryKiller(final, why)
             r.kt = tier
             r.os = oneShot
             r.ni, r.kc = ni, kc
+            r.kl = killer and level or nil -- the killer's level (0.9.11, asked by the guild), -1 = "??"
             ns.Data.NoteKiller(book, r)
             if pending.sent then ns.Comm.SendRecord(pending.owner, pending.t, "R") end
             ns.Changed()
@@ -344,6 +421,8 @@ function Death.Record()
     -- died in a raid boss fight: under that boss on the leaderboard
     if rec.it == "raid" and ns.Wipe and ns.Wipe.Boss then rec.b = ns.Wipe.Boss(rec) end
     local book = ns.Book()
+    -- the very first death of this character (0.9.11): its own line, and the deathless run is over
+    if ns.Lines.IsFirst(rec, me, book) then rec.fd = true end
     -- a second death within the same second is the same death
     if not ns.Data.Add(book, me, rec, true) then return end
     -- only for my own line, not sent (0.9.0): when my fight began (together), a level-up this session

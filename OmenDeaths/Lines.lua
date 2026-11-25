@@ -84,7 +84,7 @@ Lines.SETS = {
     -- open world, killer far above my level: red or skull, as the game colours its level
     above = {
         killer = { "{name} picked a fight way above their pay grade: {killer}",
-            "{name} saw {killer}'s level and went for it anyway", "{killer} was a few levels out of {name}'s league" },
+            "{name} saw the level of {killer} and went for it anyway", "{killer} was a few levels out of {name}'s league" },
     },
     -- open world, killer gray: gives no experience, still got me
     gray = {
@@ -222,6 +222,35 @@ Lines.SETS = {
             dps = { killer = { "{name} threw lightning at {killer}. {killer} threw {name}." }, plain = { "{name} grounded themselves. Six feet deep." } },
         },
     },
+    -- Deathless (0.9.11, wish of the user): every 10 levels without ever dying, each step bigger.
+    -- {n} = the level. No pronouns (the user's choice: none, else "their").
+    deathless = {
+        [10] = { "Achievement: {name} reached level 10 without dying. A careful start.",
+            "Achievement: {name} reached level 10 without a single death. The Spirit Healer is still waiting for a first visit." },
+        [20] = { "Achievement: {name} reached level 20 deathless. Twenty levels, zero corpse runs.",
+            "Achievement: {name} reached level 20 without dying. The graveyard has started asking questions." },
+        [30] = { "Achievement: {name} reached level 30 without dying! Halfway there, and not a scratch.",
+            "Achievement: {name} hit level 30 deathless! Even the murlocs have given up." },
+        [40] = { "ACHIEVEMENT: {name} reached level 40 WITHOUT DYING! Mounted, armed and still never seen a graveyard.",
+            "ACHIEVEMENT: {name} reached level 40 deathless! The Spirit Healer has filed a missing person report." },
+        [50] = { "ACHIEVEMENT: {name} reached level 50 WITHOUT A SINGLE DEATH! Ten more levels. The whole guild is watching. No pressure.",
+            "ACHIEVEMENT: {name} reached level 50 deathless! Legends are whispered in Orgrimmar and Stormwind alike." },
+        [60] = { "LEGEND: {name} reached level 60 WITHOUT DYING ONCE!" },
+    },
+    deathless60 = { "60 levels. Zero deaths. Bow down, mortals. {name} enters the Hall of the Deathless." },
+    -- The very first death of a character (0.9.11): always its own line, bigger after a longer run.
+    -- {n} = the level, {levels} = the levels it stayed alive.
+    first = {
+        low = { killer = { "First blood: {name} died for the first time at level {n}, to {killer}. Welcome to the club." },
+            plain = { "First blood: {name} died for the first time at level {n}. Welcome to the club." } },
+        high = { killer = { "The deathless run is over: {name} died for the first time at level {n}, to {killer}. {levels} levels of perfection, gone." },
+            plain = { "The deathless run is over: {name} died for the first time at level {n}. {levels} levels of perfection, gone." } },
+        close = { killer = { "SO CLOSE: {name} died for the first time at level {n}, to {killer}, one level before Deathless 60. The guild will never forget." },
+            plain = { "SO CLOSE: {name} died for the first time at level {n}, one level before Deathless 60. The guild will never forget." } },
+        -- already Deathless 60: the fall of a legend
+        top = { killer = { "A LEGEND FALLS: {name}, Deathless 60, died for the first time, to {killer}. The Hall of Fame has one name less." },
+            plain = { "A LEGEND FALLS: {name}, Deathless 60, died for the first time. The Hall of Fame has one name less." } },
+    },
     generic = {
         plain = { "{name} bit the dust", "{name} is taking a dirt nap", "{name} joined the Spirit Healer fan club",
             "{name} is now a ghost. Spooky.", "Pour one out for {name}", "{name} took a shortcut to the graveyard",
@@ -264,6 +293,7 @@ function Lines.Render(template, name, killer, vars)
         :gsub("{n}", function() return tostring(n or "") end)
         :gsub("{other}", function() return vars.other or "" end)
         :gsub("{leader}", function() return vars.leader or "" end)
+        :gsub("{levels}", function() return tostring(vars.levels or "") end)
         :gsub("{NAME}", function() return Lines.Loud(name) end)
         :gsub("{KILLER}", function() return Lines.Loud(killer or "") end))
 end
@@ -408,6 +438,26 @@ function Lines.CleanDays(rec, owner, book)
     return (rec.t - prev > Lines.CLEAN_DAYS * 86400) and days or nil
 end
 
+-- The first death (0.9.11): low under 30, high from 30, close at 59 (one level before Deathless 60).
+-- 30 is where the deathless popups start; the user approved these steps (25-11-2026).
+-- At 60 (already Deathless 60): "top".
+Lines.FIRST_HIGH, Lines.FIRST_CLOSE, Lines.FIRST_TOP = 30, 59, 60
+function Lines.FirstTier(level)
+    if level >= Lines.FIRST_TOP then return "top" end
+    if level >= Lines.FIRST_CLOSE then return "close" end
+    if level >= Lines.FIRST_HIGH then return "high" end
+    return "low"
+end
+
+-- Is this (not yet stored) death the character's very first? Only when the game's own statistic
+-- is known: without it, someone who got the addon late would get a false "first death".
+-- AllTime = the statistic without battlegrounds plus the deaths seen after it was read.
+function Lines.IsFirst(rec, owner, book)
+    local p = book and owner and book.players[owner]
+    if not p or not p.stat then return false end
+    return Lines.AllTime(rec, owner, book) == 0
+end
+
 -- The special line that fits, first in this order (one line per death): milestone, together,
 -- streak, plague, clean, level-up, one-shot. Returns list, named, vars; nil when none fits.
 function Lines.Special(rec, name, book)
@@ -415,6 +465,13 @@ function Lines.Special(rec, name, book)
     local function pick(set, vars)
         if rec.k and set.killer then return set.killer, true, vars end
         if set.plain then return set.plain, false, vars end
+    end
+    -- the very first death goes before everything (0.9.11)
+    if rec.fd then
+        local lv = type(rec.l) == "number" and rec.l or 1
+        local set = S.first[Lines.FirstTier(lv)]
+        local list, named = pick(set, nil)
+        return list, named, { n = lv, levels = math.max(0, lv - 1) }
     end
     local all = Lines.AllTime(rec, name, book)
     if Lines.IsMilestone(all) then return S.milestone.plain, false, { n = all } end
@@ -462,7 +519,25 @@ function Lines.For(rec, name, book)
         end
     end
     local template = list[math.random(#list)]
-    return Lines.Render(template, name, rec.k, vars), named, template, vars
+    return Lines.Render(Lines.WithLevel(template, rec), name, rec.k, vars), named, template, vars
+end
+
+-- The killer's level as the game shows it: -1 = "??" (a skull mob).
+function Lines.Level(kl)
+    if type(kl) ~= "number" then return nil end
+    return kl == -1 and "??" or tostring(kl)
+end
+
+-- The level goes right after the first time the line names the killer (0.9.11, asked by the guild):
+-- "Hogger (lvl 12) says hi to Bob". Lines without the killer get it in Lines.Detail.
+function Lines.WithLevel(template, rec)
+    local lvl = rec.k and Lines.Level(rec.kl)
+    if not lvl then return template end
+    local a = template:find("{killer}", 1, true)
+    local b = template:find("{KILLER}", 1, true)
+    local at = a and b and math.min(a, b) or a or b
+    if not at then return template end
+    return template:sub(1, at + 7) .. " (lvl " .. lvl .. ")" .. template:sub(at + 8)
 end
 
 function Lines.Merge(a, b)
@@ -476,7 +551,9 @@ end
 function Lines.Detail(rec, namedKiller)
     local cause
     if rec.k and not namedKiller then
-        cause = "to " .. rec.k .. (rec.s and (" (" .. rec.s .. ")") or "")
+        local lvl = Lines.Level(rec.kl)
+        local inside = lvl and ("lvl " .. lvl .. (rec.s and (", " .. rec.s) or "")) or rec.s
+        cause = "to " .. rec.k .. (inside and (" (" .. inside .. ")") or "")
     elseif rec.k and rec.s then
         cause = "by " .. rec.s
     elseif not rec.k and rec.s and not ENV[rec.s] then

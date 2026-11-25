@@ -29,6 +29,7 @@ This link always gives the newest version. The addon tells you in-game when a ne
 - All Time rank-ups: a short [Rank 33 > 32] on your line, and a line of its own when you pass someone in the top 3
 - A public shaming when you take the Spirit Healer's deal instead of walking back
 - Last week's awards in guild chat after the weekly reset: Death of the week, Floor Inspector, Deadliest foe
+- Hall of Fame: everyone who never died, ranked by level, with an achievement every 10 levels and the biggest one at 60
 - In raids, one summary in guild chat per boss fight instead of a line per death
 - Auto repair at merchants (on by default, the guild bank only if you switch it on) and a Repairs board: who pays the biggest repair bills
 - Optional sound when a guildie dies: the human death scream, male or female

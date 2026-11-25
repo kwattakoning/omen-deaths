@@ -17,6 +17,7 @@
 --   K|npc|at|name                                                        the NPC number of a killer, learned by seeing it (0.9.8)
 --   X|npc|at|name                                                        the same, as an answer to J
 --   J|from|count|latest                                                  "I am complete up to from, and hold this many"
+--   Y|name|level|t|flag|class                                            my level while I never died (0.9.11, Stats.lua)
 --
 -- Whoever holds more of a player's deaths than the asker sends them. Everyone hears every
 -- message on the guild channel, so a record somebody else already sent is not sent again.
@@ -97,16 +98,23 @@ function Comm.EncodeRecord(kind, owner, r, wait)
     for i = 1, last do msg = msg .. "|" .. extra[i] end
     -- field 16 (0.9.8): what the killer is, an NPC number or the class of a player. Older versions
     -- read fewer fields and leave it. No room: the portrait goes first, the wait flag stays.
+    -- field 17 (0.9.11): the killer's level, -1 = "??". Field 18 (0.9.11): "f" = the very first death.
+    -- No room: the last field goes first (first-death flag, level, portrait), the wait flag stays
+    -- longest; without even that the receiver simply shows its popup at once, as before.
     local who = r.ni and tostring(r.ni) or (type(r.kc) == "string" and Clean(r.kc, 11)) or nil
-    if wait or who then
-        local tail = string.rep("|", 3 - last) .. "|" .. (wait and "w" or "")
-        local full = who and (tail .. "|" .. who) or tail
-        if #msg + #full <= Comm.MAX_LEN then
-            msg = msg .. full
-        elseif wait and #msg + #tail <= Comm.MAX_LEN then
-            -- no room for the flag either: the receiver simply shows its popup at once, as before
-            msg = msg .. tail
+    local kl = type(r.kl) == "number" and r.kl >= -1 and r.kl < 1000 and tostring(math.floor(r.kl)) or nil
+    local tail = { wait and "w" or "", who or "", kl or "", r.fd and "f" or "" }
+    local upto = 0
+    for i = 1, #tail do if tail[i] ~= "" then upto = i end end
+    while upto > 0 do
+        local s = string.rep("|", 3 - last)
+        for i = 1, upto do s = s .. "|" .. tail[i] end
+        if #msg + #s <= Comm.MAX_LEN then
+            msg = msg .. s
+            break
         end
+        upto = upto - 1
+        while upto > 0 and tail[upto] == "" do upto = upto - 1 end
     end
     return msg
 end
@@ -163,6 +171,8 @@ function Comm.DecodeRecord(msg)
         z = Text(p[9]), k = Text(p[10]), s = Text(p[11]), b = Text(p[12]), r = Comm.ROLE_FROM[p[13] or ""],
         g = (p[14] == "m" or p[14] == "f") and p[14] or nil,
         ni = tonumber(p[16]), kc = not tonumber(p[16]) and p[16] and p[16]:match("^%u+$") or nil,
+        kl = p[17] and p[17]:match("^%-?%d+$") and tonumber(p[17]) or nil,
+        fd = p[18] == "f" or nil,
     }, p[15] == "w"
 end
 
@@ -479,6 +489,8 @@ local function OnVector(sender, v, k, n)
     local awards = ns.Awards and ns.Awards.Claim()
     if awards then Push({ msg = awards }) end
     if ns.Repair then ns.Repair.SendMine() end
+    if ns.Probe then ns.Probe.SendMine() end
+    if ns.Stats then ns.Stats.SendMine() end
 end
 
 -- "0.10.0" > "0.9.0": compares number by number.
@@ -570,6 +582,17 @@ function Comm.OnMessage(prefix, msg, channel, sender)
         if from then
             Seen(sender)
             Comm.AnswerNpcs(tonumber(from), tonumber(count), tonumber(latest))
+        end
+    elseif kind == "Y" then
+        -- the Hall of Fame (0.9.11): only the player's own level counts
+        Seen(sender)
+        if ns.Stats then ns.Stats.Heard(msg, sender) end
+    elseif kind == "G" then
+        -- raid tools measurement (0.9.11): only the player's own report counts
+        local r = ns.Probe.DecodePosition(msg)
+        if r and ns.SameChar(r.from, sender) then
+            Seen(sender)
+            ns.Probe.AddPosition(ns.Book(), r)
         end
     elseif kind == "Q" then
         local after = tonumber(msg:match("^Q|(%d+)$"))
@@ -673,7 +696,7 @@ function Comm.HeardUpdateClaim(version)
 end
 
 -- What this version brings, for the line in guild chat. Change it with each release.
-Comm.UPDATE_NEWS = "for the new Guild repairs switch and a fairer Repairs board"
+Comm.UPDATE_NEWS = "for the new Hall of Fame, deathless achievements and the level of your killer"
 function Comm.UpdateLine()
     return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version "
         .. Comm.UPDATE_NEWS .. ": CurseForge app or " .. ns.DOWNLOAD)
@@ -777,6 +800,8 @@ local function TrySync()
     Push({ msg = "J|" .. (ns.Book().npcFrom or 0) .. "|" .. npcCount .. "|" .. npcLatest })
     Comm.SendHealth()
     if ns.Repair then ns.Repair.SendMine() end
+    if ns.Probe then ns.Probe.SendMine() end
+    if ns.Stats then ns.Stats.SendMine() end
     local wait = Comm.UPDATE_WAIT + math.random() * Comm.RELAY_JITTER
     if C_Timer and C_Timer.After then
         C_Timer.After(wait, function()

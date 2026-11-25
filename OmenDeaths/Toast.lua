@@ -152,6 +152,8 @@ poster:SetScript("OnUpdate", function(self)
         else
             local ok = Send(item.msg)
             Toast.LogPost(item.kind, item.queued, ok)
+            -- Deathless 60 (0.9.11): its second line right behind it
+            if ok and item.follow then SendFollow(item.follow, item.queued) end
             -- boss summary, awards, new version: rare (a few per session), so the guild sees the log at once
             Report()
         end
@@ -295,7 +297,8 @@ function Toast.GuildPost(owner, t)
     local rank = ns.Lines.RankUp(rec, owner, ns.Book())
     local top3 = rank and rank.to <= 3 and Toast.RankLine(owner, rank) or nil
     -- died in a boss fight: the summary after the fight covers it (Wipe.lua); a top 3 line follows it
-    if ns.Wipe and ns.Wipe.Covers(rec) then
+    -- the very first death always gets its own line (0.9.11), also in a boss fight
+    if ns.Wipe and ns.Wipe.Covers(rec) and not rec.fd then
         if top3 then ns.Wipe.HoldRank(rec, top3) end
         return Toast.Note("boss")
     end
@@ -310,7 +313,9 @@ end
 Toast.TOP_Y = -140      -- own place when no popup is open (as before)
 Toast.POPUP_GAP = 4     -- between the game's popup and the toast
 Toast.POPUPS = 4        -- the game has StaticPopup1 to StaticPopup4
+Toast.CENTER_Y = 120 -- the big popup: a little above the middle, clear of the character
 function Toast.Anchor()
+    if frame.center then return end
     local below
     for i = 1, Toast.POPUPS do
         local p = _G["StaticPopup" .. i]
@@ -374,10 +379,11 @@ local function Build()
         -- the game's popup can open (or close) just after the toast
         Toast.Anchor()
         local age = GetTime() - (self.started or 0)
-        if age >= SHOW + FADE then
+        local show = self.showFor or SHOW
+        if age >= show + FADE then
             self:Hide()
-        elseif age > SHOW then
-            self:SetAlpha(1 - (age - SHOW) / FADE)
+        elseif age > show then
+            self:SetAlpha(1 - (age - show) / FADE)
         end
     end)
     frame:Hide()
@@ -416,13 +422,31 @@ function Toast.Sound(gender)
     for _ = 2, Toast.TIMES do pcall(PlaySound, id, Toast.CHANNEL) end
 end
 
-local function Show(title, line)
+-- style (0.9.11, deathless and first deaths): scale = bigger popup, gold = gold border and a crown,
+-- center = in the middle of the screen, show = seconds on screen. Sizes by feel, as the popup itself.
+local function Show(title, line, style)
     if not frame then Build() end
+    style = style or {}
     frame.title:SetText(title)
     frame.line:SetText(line)
     -- a streak stands out in orange (colour by feel, as the rest of the popup)
     if title:find("^%[%d+x STREAK") then frame.title:SetTextColor(1, 0.45, 0)
     else frame.title:SetTextColor(1, 0.82, 0) end
+    frame:SetScale(style.scale or 1)
+    if style.gold then
+        frame:SetBackdropBorderColor(1, 0.82, 0)
+        frame.skull:SetTexture("Interface\\Icons\\INV_Crown_01")
+    else
+        frame:SetBackdropBorderColor(0.77, 0.12, 0.23)
+        frame.skull:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
+    end
+    frame.showFor = style.show or SHOW
+    frame.center = style.center
+    frame.below = "again" -- anchor afresh: the last popup may have stood elsewhere
+    if style.center then
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, Toast.CENTER_Y / (style.scale or 1))
+    end
     frame.started = GetTime()
     frame:SetAlpha(1)
     Toast.Anchor()
@@ -498,7 +522,9 @@ function Toast.Death(owner, rec, shared)
     if not mine and ns.db.settings.sound then Toast.Sound(rec.g) end
     local headline, named, template, n
     local sharedText = not mine and shared and shared.text
-    if mine then
+    if mine and rec.fd then
+        headline, named = "Your very first death. The deathless run is over.", false
+    elseif mine then
         headline, named = Pick(SELF), false
     elseif sharedText then
         headline, named = sharedText, shared.named
@@ -511,8 +537,42 @@ function Toast.Death(owner, rec, shared)
         -- the popup's line, with the name in class colour
         local colored = not mine and ns.Colored(owner, ns.ClassColor(rec.c))
         local text = mine and headline or (sharedText and ColorName(sharedText, owner, colored))
-            or ns.Lines.Render(template, colored, rec.k, n)
+            or ns.Lines.Render(ns.Lines.WithLevel(template, rec), colored, rec.k, n)
         ns.Print(text .. (detail ~= "" and (" — " .. detail) or ""))
     end
-    if ns.db.settings.toast then Show(headline, detail) end
+    if ns.db.settings.toast then Show(headline, detail, rec.fd and Toast.FirstStyle(rec.l) or nil) end
+end
+
+-- Deathless (0.9.11): the popup grows with the step. 10 and 20 only go to guild chat (the user's plan);
+-- from 30 a popup, from 40 with the game's level-up sound, 60 the biggest, in the middle of the screen.
+Toast.DEATHLESS = {
+    [30] = { scale = 1, gold = true },
+    [40] = { scale = 1.15, gold = true, sound = 1 },
+    [50] = { scale = 1.3, gold = true, sound = 1, show = 8 },
+    [60] = { scale = 1.6, gold = true, sound = 2, center = true, show = 12 },
+}
+-- SOUNDKIT.LEVELUPSOUND = 888 in the game's own list; not heard in Forever yet
+Toast.SOUND_CHEER = 888
+function Toast.Deathless(owner, lv)
+    if not ns.db or not ns.db.settings.toast then return end
+    local style = Toast.DEATHLESS[lv]
+    if not style then return end
+    local mine = owner == ns.MyName()
+    local who = mine and "You" or owner
+    local title = lv >= 60 and ("DEATHLESS 60: " .. owner) or ("Deathless " .. lv .. ": " .. owner)
+    local line = lv >= 60 and (who .. " reached level 60 without dying once · Hall of Fame")
+        or (who .. " reached level " .. lv .. " without a single death")
+    Show(title, line, style)
+    if style.sound and PlaySound then
+        local id = SOUNDKIT and SOUNDKIT.LEVELUPSOUND or Toast.SOUND_CHEER
+        for _ = 1, style.sound do pcall(PlaySound, id, Toast.CHANNEL) end
+    end
+end
+
+-- The very first death: bigger after a longer run, in the same steps as the levels (30, 59).
+function Toast.FirstStyle(level)
+    level = type(level) == "number" and level or 1
+    if level >= ns.Lines.FIRST_TOP then return { scale = 1.6, center = true, show = 12 } end
+    if level >= ns.Lines.FIRST_CLOSE then return { scale = 1.3, show = 8 } end
+    if level >= ns.Lines.FIRST_HIGH then return { scale = 1.15 } end
 end
