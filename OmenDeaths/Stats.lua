@@ -111,7 +111,8 @@ end)
 -- counts from the character's first day, so a run from before the addon counts.
 --
 -- Y|name|level|t|flag|class   my level while I never died; flag "m" = a step reached (fanfare),
---                             else quiet (a level-up, login, an answer to a guildie's login)
+--                             "u" = a level-up between the steps (0.9.12: a short chat line),
+--                             else quiet (login, an answer to a guildie's login)
 ---------------------------------------------------------------------------
 Stats.DEATHLESS_STEP, Stats.DEATHLESS_TOP = 10, 60
 
@@ -146,20 +147,110 @@ function Stats.HasDied(book, name)
     return all ~= nil and all > 0
 end
 
--- The Hall of Fame: who never died, highest level first; the same level: who got there first.
+-- The first death of a player as the addon knows it: the record flagged first (0.9.11), else the
+-- oldest death outside battlegrounds. nil when the addon saw none.
+local function FirstFall(book, name)
+    local p = book.players and book.players[name]
+    if not p then return nil end
+    local first
+    for t, r in pairs(p.deaths or {}) do
+        if r.fd then return r end
+        if ns.Data.InScope(r, nil) and (not first or t < first.t) then first = r end
+    end
+    return first
+end
+
+-- The Hall of Fame (0.9.12, the user's plan): one ranking. Who never died stands at the level reached
+-- and keeps climbing; who died stays at the level of the first death, with a cross (dead = true).
+-- Who died before the addon could see it (no known level) is not on it. Highest level first; the same
+-- level: the living above the fallen, then who got there first.
 function Stats.Ladder(book)
-    local list = {}
-    for name, e in pairs(book and book.deathless or {}) do
-        if not Stats.HasDied(book, name) and (not ns.Data.Shown or ns.Data.Shown(name)) then
-            list[#list + 1] = { name = name, lv = e.lv, t = e.t, class = e.c }
+    local list, seen = {}, {}
+    if not book then return list end
+    local function shown(name) return not ns.Data.Shown or ns.Data.Shown(name) end
+    for name, e in pairs(book.deathless or {}) do
+        seen[name] = true
+        if shown(name) then
+            if not Stats.HasDied(book, name) then
+                list[#list + 1] = { name = name, lv = e.lv, t = e.t, class = e.c }
+            else
+                local r = FirstFall(book, name)
+                local lv = r and type(r.l) == "number" and r.l or e.lv
+                -- the same level: who got there first (the user, 26-11-2026: the first Deathless 60
+                -- who falls stays above a later 60 who falls); the death when that time is unknown
+                local t = e.lv == lv and e.t or (r and r.t) or e.t
+                list[#list + 1] = { name = name, lv = lv, t = t, class = e.c or book.players[name] and book.players[name].class,
+                    dead = true, k = r and r.k, kl = r and r.kl }
+            end
+        end
+    end
+    for name, p in pairs(book.players or {}) do
+        if not seen[name] and shown(name) then
+            for _, r in pairs(p.deaths or {}) do
+                if r.fd and type(r.l) == "number" then
+                    list[#list + 1] = { name = name, lv = r.l, t = r.t, class = p.class, dead = true, k = r.k, kl = r.kl }
+                    break
+                end
+            end
         end
     end
     table.sort(list, function(a, b)
         if a.lv ~= b.lv then return a.lv > b.lv end
+        if (a.dead or false) ~= (b.dead or false) then return not a.dead end
         if a.t ~= b.t then return a.t < b.t end
         return a.name < b.name
     end)
     return list
+end
+
+-- Climbing (0.9.12, the user's plan): from level 30 every level gets a short line in each one's own
+-- chat (not guild chat); the steps of 10 keep their big message. Below 30 levels come fast, so they
+-- stay quiet, unless someone passes a guildie on the ladder: that line comes at every level.
+-- 30 = where the deathless popups start (Toast.DEATHLESS), the user agreed (26-11-2026).
+Stats.CLIMB_FROM = 30
+local CROSS = "\226\128\160"
+
+-- The names above `name` on the ladder now; nil when `name` is not on it.
+function Stats.Above(book, name)
+    local above = {}
+    for _, d in ipairs(Stats.Ladder(book)) do
+        if d.name == name then return above end
+        above[d.name] = true
+    end
+    return nil
+end
+
+-- The chat line after `name` reached `level` (already in the book); `above` = Stats.Above before it,
+-- step = a step of 10 (its big message has gone out). Returns the line, nil when there is none.
+function Stats.ClimbLine(book, name, level, above, step, me)
+    local list = Stats.Ladder(book)
+    local rank, passed = nil, {}
+    for n, d in ipairs(list) do
+        if d.name == name then
+            rank = n
+        elseif rank and above and above[d.name] then
+            -- the fallen as in the Hall of Fame: a cross and a grey name (COL.muted b8b8b8)
+            passed[#passed + 1] = d.dead and (CROSS .. " " .. ns.Colored(d.name, 0.72, 0.72, 0.72))
+                or ns.Colored(d.name, ns.ClassColor(d.class))
+        end
+    end
+    if not rank then return nil end
+    local who = me and "You" or ns.Colored(name, ns.ClassColor(list[rank].class))
+    local past
+    if #passed == 1 then past = passed[1]
+    elseif #passed == 2 then past = passed[1] .. " and " .. passed[2]
+    elseif #passed > 2 then past = passed[1] .. " and " .. (#passed - 1) .. " others" end
+    local place = "#" .. rank .. " in the Hall of Fame"
+    if level >= Stats.CLIMB_FROM and not step then
+        return who .. " reached level " .. level .. " deathless" .. (past and (" and passed " .. past) or "") .. " (" .. place .. ")"
+    elseif past then
+        return who .. " passed " .. past .. " (" .. place .. ")"
+    end
+    return nil
+end
+
+local function ClimbPrint(line)
+    if line and ns.db.settings.chat then ns.Print(line) end
 end
 
 local function NeverDied(me, book)
@@ -191,11 +282,20 @@ function Stats.CheckMine(dingLevel)
         return
     end
     local e = book.deathless and book.deathless[me]
+    local up = e and e.lv < level
     if not e or e.lv < level then
         Stats.AddDeathless(book, me, level, ns.Now(), MyClass())
         ns.Changed()
     end
-    Stats.SendMine()
+    -- a ding between the steps of 10 goes out flagged "u": guildies show the climb (0.9.12);
+    -- the steps go out as "m" from Stats.Deathless. Older versions take "u" as quiet.
+    local stepLevel = level % Stats.DEATHLESS_STEP == 0 and level <= Stats.DEATHLESS_TOP
+    if up and type(dingLevel) == "number" and not stepLevel then
+        local now = book.deathless[me]
+        ns.Comm.SendRaw(Stats.Encode(me, now.lv, now.t, "u", now.c))
+    else
+        Stats.SendMine()
+    end
     return level
 end
 
@@ -230,8 +330,16 @@ local dinged
 local function AfterDing()
     local level = dinged
     dinged = nil
-    if level % Stats.DEATHLESS_STEP == 0 and level <= Stats.DEATHLESS_TOP then Stats.Deathless(level) end
+    local me = ns.db and ns.GuildName() and ns.MyName()
+    local book = me and ns.Book()
+    local above = book and Stats.Above(book, me)
+    local before = book and book.deathless and book.deathless[me] and book.deathless[me].lv
+    local step = level % Stats.DEATHLESS_STEP == 0 and level <= Stats.DEATHLESS_TOP
+    if step then Stats.Deathless(level) end
     Stats.CheckMine(level)
+    -- my own climb in my own chat, as guildies see it
+    local after = book and book.deathless and book.deathless[me] and book.deathless[me].lv
+    if book and before and after and after > before then ClimbPrint(Stats.ClimbLine(book, me, after, above, step, true)) end
 end
 ns.On("PLAYER_LEVEL_UP", function(level)
     level = ns.Safe(level)
@@ -257,8 +365,16 @@ function Stats.Heard(msg, sender)
     if name == ns.MyName() then return end
     class = class and class:match("^%u+$") or nil
     local book = ns.Book()
+    local old = book.deathless and book.deathless[name]
+    local before = old and old.lv
+    local above = Stats.Above(book, name)
     if Stats.AddDeathless(book, name, lv, t, class) then ns.Changed() end
-    if flag == "m" and lv % Stats.DEATHLESS_STEP == 0 and ns.Toast.Deathless then ns.Toast.Deathless(name, lv) end
+    local step = flag == "m" and lv % Stats.DEATHLESS_STEP == 0
+    if step and ns.Toast.Deathless then ns.Toast.Deathless(name, lv) end
+    -- a ding (0.9.12): the short line, when the level went up here (not a repeat, not a login)
+    if (flag == "u" or flag == "m") and before and lv > before then
+        ClimbPrint(Stats.ClimbLine(book, name, lv, above, step))
+    end
 end
 
 -- after a fight, and after coming back from a death (the count has gone up by then)

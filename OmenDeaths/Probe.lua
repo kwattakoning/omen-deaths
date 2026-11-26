@@ -204,7 +204,7 @@ function Probe.ReportDuel(winner, loser, kind)
     if type(myLevel) ~= "number" then myLevel = nil end
     local d = { by = me, w = iWon and me or other, l = iWon and other or me, k = Probe.DUEL_CODE[kind], t = ns.Now(),
         wl = iWon and myLevel or otherLevel, ll = iWon and otherLevel or myLevel }
-    if ns.Data.AddDuel(ns.Book(), d) then ns.Comm.SendDuel(d) end
+    if ns.Duels.Add(ns.Book(), d, true) then ns.Comm.SendDuel(d) end
 end
 
 function Probe.System(text)

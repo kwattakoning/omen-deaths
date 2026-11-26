@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.12
+- The Hall of Fame is now one ranking of the living and the fallen. Who died keeps a place at the level of the first death, with a cross and a grey name. The living keep climbing and can pass them
+- From level 30, every level without dying gets a short line in your own chat: "Kestrel reached level 38 deathless (#7 in the Hall of Fame)". Not in guild chat
+- Pass a guildie on the Hall of Fame and everyone with the addon sees it: "Kestrel passed Ashveil (#6 in the Hall of Fame)"
+- New Duels tab: a duel ranking with one Omen belt. Beat someone above you to take their place, the champion holds the belt until beaten. One duel per pair per day counts. See who is online and whisper a challenge with one click
+
 ## 0.9.11
 - New Hall of Fame tab: everyone who never died, ranked by level. Level 60 on top, stay alive and level up to climb
 - Deathless achievements: reach level 10, 20, 30, 40, 50 or 60 without ever dying and the guild hears it. Each step is bigger, level 60 gets the biggest popup. Battleground deaths do not count

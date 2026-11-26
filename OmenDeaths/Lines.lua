@@ -248,8 +248,8 @@ Lines.SETS = {
         close = { killer = { "SO CLOSE: {name} died for the first time at level {n}, to {killer}, one level before Deathless 60. The guild will never forget." },
             plain = { "SO CLOSE: {name} died for the first time at level {n}, one level before Deathless 60. The guild will never forget." } },
         -- already Deathless 60: the fall of a legend
-        top = { killer = { "A LEGEND FALLS: {name}, Deathless 60, died for the first time, to {killer}. The Hall of Fame has one name less." },
-            plain = { "A LEGEND FALLS: {name}, Deathless 60, died for the first time. The Hall of Fame has one name less." } },
+        top = { killer = { "A LEGEND FALLS: {name}, Deathless 60, died for the first time, to {killer}. The Hall of Fame carves a cross before the name." },
+            plain = { "A LEGEND FALLS: {name}, Deathless 60, died for the first time. The Hall of Fame carves a cross before the name." } },
     },
     generic = {
         plain = { "{name} bit the dust", "{name} is taking a dirt nap", "{name} joined the Spirit Healer fan club",

@@ -13,6 +13,9 @@ NewUI.TAB_SIZE, NewUI.TAB_GAP, NewUI.TAB_ICON = 40, 3, 50 -- as the game's side 
 -- 0.9.11: the tabs ran past the bottom of the window (user, 25-11-2026). The whole tab, art and
 -- icon, is scaled; 0.8 keeps 10 tabs in the window with room to spare.
 NewUI.TAB_SCALE = 0.8
+-- the challenge button in a Duels row (0.9.12): 22 = the height of the game's small buttons on this
+-- window (Btn 22), at 395 as in the preview the user approved; the note gets 150 there instead of 196
+NewUI.CHALLENGE, NewUI.CHALLENGE_X, NewUI.NOTE_SHORT = 22, 395, 150
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local LOGO = "Interface\\AddOns\\OmenDeaths\\OmenLogo"
@@ -29,11 +32,18 @@ local COL = {
     dark = C("101512"), crimson = C("c41e3a"), stone = C("8a6a3a"), orange = C("ff9900"),
 }
 
+-- the cross before a fallen name in the Hall of Fame (0.9.12): the dagger sign of the game's own font
+NewUI.CROSS = "|cfff2f2f2\226\128\160|r"
+-- online / offline in the Duels list (0.9.12): the game's own status dots of the Friends list
+NewUI.ONLINE = "|TInterface\\FriendsFrame\\StatusIcon-Online:12|t Online"
+NewUI.OFFLINE = "|TInterface\\FriendsFrame\\StatusIcon-Offline:12|t Offline"
+
 NewUI.TABS = {
     { id = "board", label = "Leaderboard", icon = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01", periods = true, scope = true },
     { id = "killers", label = "Killers", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", periods = true, scope = true },
     -- beta = only with /omen beta (25-11-2026, the user's choice: not finished yet)
-    { id = "duels", label = "Duels", icon = "Interface\\Icons\\Ability_DualWield", beta = true },
+    -- Duels out of beta with the ranking (0.9.12, the user, 26-11-2026)
+    { id = "duels", label = "Duels", icon = "Interface\\Icons\\Ability_DualWield" },
     { id = "repairs", label = "Repairs", icon = "Interface\\Icons\\Trade_BlackSmithing", periods = true },
     { id = "awards", label = "Awards", icon = "Interface\\Icons\\INV_Crown_01" },
     -- Hall of Fame (0.9.11, wish of the user): everyone who never died, highest level on top
@@ -202,6 +212,13 @@ local function BuildTomb(parent, i)
     t.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     t.mark = Label(t, "GameFontNormalSmall", spec.medal)
     t.mark:SetPoint("BOTTOM", t.icon, "TOP", 0, 3)
+    -- the Omen belt beside the champion's icon (Duels, 0.9.12)
+    t.belt = t:CreateTexture(nil, "ARTWORK")
+    t.belt:SetSize(20, 20)
+    t.belt:SetPoint("BOTTOMLEFT", t.icon, "BOTTOMRIGHT", 4, 0)
+    t.belt:SetTexture(NewUI.Icon("Interface\\Icons\\INV_Belt_13"))
+    t.belt:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    t.belt:Hide()
     t:SetScript("OnEnter", Tip)
     t:SetScript("OnLeave", NoTip)
     return t
@@ -233,6 +250,27 @@ local function BuildRow(parent, i)
     r.value = Label(r, "GameFontHighlight")
     r.value:SetPoint("RIGHT", r, "RIGHT", 0, 0)
     r.value:SetJustifyH("RIGHT")
+    -- Duels (0.9.12): whisper a challenge; between the note and the score, the note made shorter
+    local b = CreateFrame("Button", nil, r)
+    b:SetSize(NewUI.CHALLENGE, NewUI.CHALLENGE)
+    b:SetPoint("LEFT", r, "LEFT", NewUI.CHALLENGE_X, 0)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetAllPoints(b)
+    b.icon:SetTexture(NewUI.Icon("Interface\\Icons\\Ability_DualWield"))
+    b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    b:SetScript("OnClick", function(self)
+        if self.target and self.online then ns.Duels.Challenge(self.target, self.rank, self.mine) end
+    end)
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(self.online and ("Challenge " .. self.target) or (self.target .. " is offline"))
+        if self.online then GameTooltip:AddLine("Opens a whisper. Press Enter to send it.", 1, 1, 1) end
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", NoTip)
+    b:Hide()
+    r.challenge = b
     r:SetScript("OnEnter", Tip)
     r:SetScript("OnLeave", NoTip)
     return r
@@ -662,16 +700,40 @@ function NewUI.Page(id, book, now)
     elseif id == "deathless" then
         local list = ns.Stats.Ladder(book)
         ns.UI.list = list
-        local mine
+        -- 0.9.12: one ranking, the fallen keep their place with a cross and a grey name
+        local mine, alive = nil, 0
         for n, d in ipairs(list) do
-            page.items[n] = ClassItem(d, "Lvl " .. d.lv,
-                d.lv >= ns.Stats.DEATHLESS_TOP and "Deathless 60 · never died" or "Never died · still climbing", nil, n)
-            page.items[n].mark = "Still Alive #" .. n
-            if d.name == me then mine = n end
+            local note
+            if d.dead then
+                note = "Died at lvl " .. d.lv .. (d.k and (" to " .. d.k) or "")
+            else
+                alive = alive + 1
+                note = d.lv >= ns.Stats.DEATHLESS_TOP and "Deathless 60 · never died" or "Alive · still climbing"
+            end
+            local item = ClassItem(d, "Lvl " .. d.lv, note, nil, n)
+            if d.dead then
+                item.name = NewUI.CROSS .. " " .. d.name
+                item.color = { COL.muted[1], COL.muted[2], COL.muted[3] }
+            end
+            item.mark = (d.dead and "Fallen #" or "Alive #") .. n
+            page.items[n] = item
+            if d.name == me then mine = d end
         end
         page.message = #list == 0 and "Nobody here yet. Everyone has died at least once. Typical." or nil
-        page.left = ("%d %s never died · stay alive and level up to climb"):format(#list, #list == 1 and "guildie has" or "guildies have")
-        page.right = "You: " .. (mine and ("#" .. mine) or "not on it") .. "  ·  " .. page.right
+        -- the rule on the free line above the board (this tab has no period buttons); the footer is
+        -- short: its left part is 300 wide and does not wrap
+        page.note = "Alive: climbs with each level  ·  " .. NewUI.CROSS .. " Fallen: stays where they died"
+        page.left = ("%d alive  ·  %d fallen"):format(alive, #list - alive)
+        local you
+        if mine then
+            you = "#" .. (function() for n, d in ipairs(list) do if d == mine then return n end end end)()
+                .. (mine.dead and (", fell at lvl " .. mine.lv) or ", alive")
+        elseif me and ns.Stats.HasDied(book, me) then
+            you = "not on it (died earlier)"
+        else
+            you = "not on it yet"
+        end
+        page.right = "You: " .. you .. "  ·  " .. page.right
     elseif id == "awards" then
         local week = ns.Awards.WeekStart()
         local lastWeek = ns.Awards.Compute(book, week - ns.Awards.WEEK, week)
@@ -685,11 +747,39 @@ function NewUI.Page(id, book, now)
         }
         page.left = "Winners are posted in guild chat after each weekly reset"
     elseif id == "duels" then
-        local n = 0
-        for _ in pairs(book.duels or {}) do n = n + 1 end
-        page.note = "The Omen duel ranking"
-        page.building = "Duel your guildies to help test it.\n\nDuel reports received so far: " .. n
-        page.noBoard = true
+        -- the duel ranking (0.9.12, the preview the user approved, layout A)
+        local r = ns.Duels.Ranking(book)
+        local roster = ns.Duels.Roster()
+        local mine = me and ns.Duels.Place(r, me)
+        local online = 0
+        ns.UI.list = {}
+        for n, name in ipairs(r.order) do
+            local i, ro = r.info[name], roster[name] or {}
+            local p = book.players[name]
+            local class = ro.class or (p and p.class)
+            local lv = ro.level or i.lv
+            if ro.online then online = online + 1 end
+            local d = { name = name, class = class, W = i.W, L = i.L, lv = lv, online = ro.online, rank = n,
+                h2h = me and name ~= me and r.h2h[name < me and (name .. "|" .. me) or (me .. "|" .. name)] or nil }
+            ns.UI.list[n] = d
+            local item = ClassItem(d, i.W .. "W " .. i.L .. "L",
+                (ro.online and NewUI.ONLINE or NewUI.OFFLINE) .. (lv and (" · lvl " .. lv) or ""), "duel", n)
+            if n == 1 then
+                local def = r.champion.defenses
+                item.mark = "CHAMPION · " .. def .. (def == 1 and " defense" or " defenses")
+                item.belt = true
+            else
+                item.mark = "Contender #" .. n
+            end
+            if name ~= me then item.challenge, item.online, item.mine = name, ro.online, mine end
+            page.items[n] = item
+        end
+        page.allRows = true
+        page.note = "Beat someone above you to take their place  ·  1 duel per pair per day counts"
+        page.message = #r.order == 0 and "No ranked duels yet.\n\nDuel a guildie to start the Omen ranking." or nil
+        page.left = ("%d ranked  ·  %d online"):format(#r.order, online)
+        local you = mine and ("#" .. mine .. " · " .. r.info[me].W .. "W " .. r.info[me].L .. "L") or "not ranked yet"
+        page.right = "You: " .. you .. "  ·  " .. page.right
     elseif id == "raids" then
         -- Raids gets its own title (24-11-2026, wish of the user); other tabs keep "Under Construction"
         page.note = "Raid plans from your raid leader"
@@ -794,6 +884,7 @@ local function FillTomb(t, item, i)
     Paint(t.name, item.color)
     t.value:SetText(item.value)
     t.note:SetText(item.note)
+    if item.belt then t.belt:Show() else t.belt:Hide() end
 end
 
 local function FillRow(r, item)
@@ -809,6 +900,17 @@ local function FillRow(r, item)
     Paint(r.name, item.color)
     r.note:SetText(item.note)
     r.value:SetText(item.value)
+    local c = r.challenge
+    if item.challenge then
+        r.note:SetWidth(NewUI.NOTE_SHORT)
+        c.target, c.online, c.rank, c.mine = item.challenge, item.online, item.rank, item.mine
+        c.icon:SetDesaturated(not item.online)
+        c.icon:SetAlpha(item.online and 1 or 0.45)
+        c:Show()
+    else
+        r.note:SetWidth(196)
+        c:Hide()
+    end
 end
 
 local function Show(w, on)
@@ -900,9 +1002,11 @@ function NewUI.Refresh()
 
     if not page.noBoard then
         for i, t in ipairs(frame.tombs) do FillTomb(t, page.items[i] or nil, i) end
-        local maxOffset = math.max(0, #page.items - 3 - NewUI.ROWS)
+        -- Duels (0.9.12, the user's choice): the list starts at #1, the top 3 stand on the stones too
+        local skip = page.allRows and 0 or 3
+        local maxOffset = math.max(0, #page.items - skip - NewUI.ROWS)
         NewUI.offset = math.min(NewUI.offset or 0, maxOffset)
-        for i, r in ipairs(frame.rows) do FillRow(r, page.items[3 + i + NewUI.offset]) end
+        for i, r in ipairs(frame.rows) do FillRow(r, page.items[skip + i + NewUI.offset]) end
     end
     if page.settings then
         for _, b in ipairs(frame.settingRows) do

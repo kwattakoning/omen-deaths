@@ -472,6 +472,21 @@ function UI.Tooltip(row)
         PlayerTooltip(row)
     elseif row.kind == "health" then
         HealthTooltip(row)
+    elseif row.kind == "duel" then
+        -- the duel ranking (0.9.12): place, score, my own score against this player
+        local d = row.data
+        GameTooltip:SetText(d.name, ns.ClassColor(d.class))
+        GameTooltip:AddLine("#" .. d.rank .. (d.rank == 1 and " · Omen Champion" or ""), 1, 0.82, 0)
+        GameTooltip:AddLine((d.lv and ("Level " .. d.lv .. " · ") or "") .. d.W .. "W " .. d.L .. "L", 1, 1, 1)
+        local me = ns.MyName()
+        if d.name ~= me then
+            if d.h2h then
+                GameTooltip:AddLine(("You vs %s: %d-%d"):format(d.name, d.h2h[me] or 0, d.h2h[d.name] or 0), 1, 1, 1)
+            else
+                GameTooltip:AddLine("You never dueled", 0.7, 0.7, 0.7)
+            end
+        end
+        GameTooltip:AddLine(d.online and "Online" or "Offline", 0.7, 0.7, 0.7)
     else
         KillerTooltip(row)
     end

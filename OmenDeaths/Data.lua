@@ -114,8 +114,10 @@ end
 
 -- Guild duels as reported (0.9.7, measurement for a duel ranking). Every report is kept apart, also
 -- when both duelists report the same duel: comparing them is what this measures.
--- KEEP 200: not measured, no guild duel seen yet (reports are about 100 bytes each).
-Data.DUEL_KEEP = 200
+-- KEEP 2000 (0.9.12): the duel ranking is played again from these reports, so a longer history keeps
+-- it right. About 100 bytes a report (as before): 2000 = about 200 KB saved. 200 held 3 guild duels
+-- in the first week (26-11-2026); the user agreed to 2000.
+Data.DUEL_KEEP = 2000
 function Data.DuelKey(d) return d.by .. "/" .. d.t .. "/" .. d.w .. "/" .. d.l end
 
 function Data.AddDuel(book, d)
@@ -123,8 +125,13 @@ function Data.AddDuel(book, d)
     local key = Data.DuelKey(d)
     if book.duels[key] then return false end
     book.duels[key] = { by = d.by, w = d.w, l = d.l, k = d.k, t = d.t, wl = d.wl, ll = d.ll }
-    local list = Data.DuelsAfter(book, -1)
-    for i = 1, #list - Data.DUEL_KEEP do book.duels[Data.DuelKey(list[i])] = nil end
+    -- sorted only when over the limit: with 2000 kept a sort on every report would be slow
+    local n = 0
+    for _ in pairs(book.duels) do n = n + 1 end
+    if n > Data.DUEL_KEEP then
+        local list = Data.DuelsAfter(book, -1)
+        for i = 1, #list - Data.DUEL_KEEP do book.duels[Data.DuelKey(list[i])] = nil end
+    end
     return true
 end
 

@@ -569,6 +569,13 @@ function Toast.Deathless(owner, lv)
     end
 end
 
+-- A new Omen champion (0.9.12, duel ranking): gold, as big as the Deathless 50 popup.
+function Toast.Champion(winner, old)
+    if not ns.db or not ns.db.settings.toast then return end
+    local line = old and (winner .. " took the belt from " .. old) or (winner .. " is the first to hold the belt")
+    Show("NEW OMEN CHAMPION", line, Toast.DEATHLESS[50])
+end
+
 -- The very first death: bigger after a longer run, in the same steps as the levels (30, 59).
 function Toast.FirstStyle(level)
     level = type(level) == "number" and level or 1

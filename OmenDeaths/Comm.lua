@@ -566,7 +566,7 @@ function Comm.OnMessage(prefix, msg, channel, sender)
             local book = ns.Book()
             -- only an answer moves this: a duel heard live says nothing about older ones missed offline
             if answer and d.t > (book.duelFrom or 0) then book.duelFrom = d.t end
-            ns.Data.AddDuel(book, d)
+            ns.Duels.Add(book, d, not answer) -- the ranking tells what changed (0.9.12)
         end
     elseif kind == "K" or kind == "X" then
         local e = Comm.DecodeNpc(msg)
@@ -696,7 +696,7 @@ function Comm.HeardUpdateClaim(version)
 end
 
 -- What this version brings, for the line in guild chat. Change it with each release.
-Comm.UPDATE_NEWS = "for the new Hall of Fame, deathless achievements and the level of your killer"
+Comm.UPDATE_NEWS = "for the duel ranking with the Omen belt and the Hall of Fame race"
 function Comm.UpdateLine()
     return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version "
         .. Comm.UPDATE_NEWS .. ": CurseForge app or " .. ns.DOWNLOAD)
