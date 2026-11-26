@@ -696,7 +696,7 @@ function Comm.HeardUpdateClaim(version)
 end
 
 -- What this version brings, for the line in guild chat. Change it with each release.
-Comm.UPDATE_NEWS = "for the duel ranking with the Omen belt and the Hall of Fame race"
+Comm.UPDATE_NEWS = "for the Omen belt: the champion now has to defend it within 7 days"
 function Comm.UpdateLine()
     return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version "
         .. Comm.UPDATE_NEWS .. ": CurseForge app or " .. ns.DOWNLOAD)

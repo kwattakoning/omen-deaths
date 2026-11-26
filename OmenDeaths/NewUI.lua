@@ -748,7 +748,7 @@ function NewUI.Page(id, book, now)
         page.left = "Winners are posted in guild chat after each weekly reset"
     elseif id == "duels" then
         -- the duel ranking (0.9.12, the preview the user approved, layout A)
-        local r = ns.Duels.Ranking(book)
+        local r = ns.Duels.Ranking(book, now)
         local roster = ns.Duels.Roster()
         local mine = me and ns.Duels.Place(r, me)
         local online = 0
@@ -768,6 +768,10 @@ function NewUI.Page(id, book, now)
                 local def = r.champion.defenses
                 item.mark = "CHAMPION · " .. def .. (def == 1 and " defense" or " defenses")
                 item.belt = true
+                -- the defense deadline (0.9.13): in days, the last day in hours
+                local left = (r.champion.active or now) + ns.Duels.DEFEND - now
+                local when = left >= 86400 and (math.floor(left / 86400) .. "d") or (math.max(1, math.ceil(left / 3600)) .. "h")
+                item.note = item.note .. " · defend in " .. when
             else
                 item.mark = "Contender #" .. n
             end

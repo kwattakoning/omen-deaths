@@ -16,6 +16,12 @@ Duels.DAY = 86400
 -- Both duelists report the same duel: same winner and loser, server time (GetServerTime). Herri vs
 -- Brad (25-11-2026) were 0 s apart; 1 s allows for the two clients reading it on either side of a second.
 Duels.SAME = 1
+-- The champion has to play a counted duel within 7 days (the user, 26-11-2026: kickboxing, a champion
+-- who will not fight loses the title). 7 = the week of the Awards; not measured.
+Duels.DEFEND = 7 * 86400
+-- Checked 15 s after login (duel answers of the login sync wait up to Comm.RELAY_JITTER = 3 s; the
+-- rest is room for sending, not measured) and every hour: an hour late on a 7-day deadline is enough.
+Duels.LOGIN_WAIT, Duels.CHECK = 15, 3600
 
 local function Pair(a, b) return a < b and (a .. "|" .. b) or (b .. "|" .. a) end
 
@@ -35,9 +41,11 @@ function Duels.List(book)
 end
 
 -- The ladder now: { order = { names, #1 first }, info = { [name] = { W, L, lv, t } },
--- champion = { name, defenses }, h2h = { [pair] = { [name] = wins } } }.
-function Duels.Ranking(book)
-    local order, info, last, h2h = {}, {}, {}, {}
+-- champion = { name, defenses, since, active }, h2h = { [pair] = { [name] = wins } },
+-- stripped = { { old, new, at } } (belts lost by not defending) }. `now` (default ns.Now()) is when
+-- the defense deadline is checked last.
+function Duels.Ranking(book, now)
+    local order, info, last, h2h, stripped = {}, {}, {}, {}, {}
     local champ = { defenses = 0 }
     local function enter(name)
         if info[name] then return end
@@ -47,7 +55,17 @@ function Duels.Ranking(book)
     local function place(name)
         for i, n in ipairs(order) do if n == name then return i end end
     end
+    -- no counted duel within Duels.DEFEND: the champion drops one place, #2 takes the belt
+    local function expire(t)
+        while champ.name and #order >= 2 and t - champ.active > Duels.DEFEND do
+            local at = champ.active + Duels.DEFEND
+            order[1], order[2] = order[2], order[1]
+            stripped[#stripped + 1] = { old = champ.name, new = order[1], at = at }
+            champ = { name = order[1], defenses = 0, since = at, active = at }
+        end
+    end
     for _, d in ipairs(Duels.List(book or {})) do
+        expire(d.t)
         local pair = Pair(d.w, d.l)
         if not last[pair] or d.t - last[pair] >= Duels.DAY then
             last[pair] = d.t
@@ -65,13 +83,39 @@ function Duels.Ranking(book)
                 table.insert(order, il, d.w)
             elseif iw == 1 and champ.name == d.w then
                 champ.defenses = champ.defenses + 1
+                champ.active = d.t
             end
-            if order[1] ~= champ.name then champ = { name = order[1], defenses = 0, since = d.t } end
+            if order[1] ~= champ.name then champ = { name = order[1], defenses = 0, since = d.t, active = d.t } end
         end
     end
-    return { order = order, info = info, champion = champ, h2h = h2h }
+    expire(now or ns.Now())
+    return { order = order, info = info, champion = champ, h2h = h2h, stripped = stripped }
 end
 
+-- A belt lost by not defending, told once per client: a line in my own chat, a popup, and guild chat
+-- from the new champion's own client. Checked at login and every Duels.CHECK seconds.
+function Duels.Check()
+    if not ns.db or not ns.GuildName() then return end
+    local book = ns.Book()
+    local now = ns.Now()
+    local r = Duels.Ranking(book, now)
+    local s = r.stripped[#r.stripped]
+    if not s or s.at <= (book.duelStripSeen or 0) then return end
+    book.duelStripSeen = s.at
+    if now - s.at > Duels.DEFEND then return end -- old news (a first look at an old history)
+    local text = s.old .. " did not defend the Omen belt for " .. math.floor(Duels.DEFEND / 86400) .. " days. " .. s.new .. " is the new Omen champion!"
+    if ns.db.settings.chat then ns.Print(text) end
+    if ns.Toast.Champion then ns.Toast.Champion(s.new, s.old, true) end
+    if ns.SameChar(s.new, ns.MyName()) and ns.db.settings.guildChat then ns.Toast.Post("[Omen Deaths] " .. text, false, "c") end
+end
+
+local function Tick()
+    pcall(Duels.Check)
+    if C_Timer and C_Timer.After then C_Timer.After(Duels.CHECK, Tick) end
+end
+ns.On("PLAYER_LOGIN", function()
+    if C_Timer and C_Timer.After then C_Timer.After(Duels.LOGIN_WAIT, Tick) end
+end)
 function Duels.Place(r, name)
     for i, n in ipairs(r.order) do if n == name then return i end end
 end

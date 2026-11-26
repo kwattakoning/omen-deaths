@@ -570,9 +570,10 @@ function Toast.Deathless(owner, lv)
 end
 
 -- A new Omen champion (0.9.12, duel ranking): gold, as big as the Deathless 50 popup.
-function Toast.Champion(winner, old)
+function Toast.Champion(winner, old, undefended)
     if not ns.db or not ns.db.settings.toast then return end
-    local line = old and (winner .. " took the belt from " .. old) or (winner .. " is the first to hold the belt")
+    local line = undefended and (old .. " did not defend it: the belt goes to " .. winner)
+        or old and (winner .. " took the belt from " .. old) or (winner .. " is the first to hold the belt")
     Show("NEW OMEN CHAMPION", line, Toast.DEATHLESS[50])
 end
 

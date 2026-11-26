@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.13
+- Duels: the champion has to defend the Omen belt within 7 days. No counted duel in a week and the belt goes to #2
+- The stone of the champion shows how long is left to defend
+
 ## 0.9.12
 - The Hall of Fame is now one ranking of the living and the fallen. Who died keeps a place at the level of the first death, with a cross and a grey name. The living keep climbing and can pass them
 - From level 30, every level without dying gets a short line in your own chat: "Kestrel reached level 38 deathless (#7 in the Hall of Fame)". Not in guild chat
