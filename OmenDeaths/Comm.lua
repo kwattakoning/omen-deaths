@@ -18,6 +18,7 @@
 --   X|npc|at|name                                                        the same, as an answer to J
 --   J|from|count|latest                                                  "I am complete up to from, and hold this many"
 --   Y|name|level|t|flag|class                                            my level while I never died (0.9.11, Stats.lua)
+--   B|at                                                                 "I posted the belt that went undefended at " (0.9.14, Duels.lua)
 --
 -- Whoever holds more of a player's deaths than the asker sends them. Everyone hears every
 -- message on the guild channel, so a record somebody else already sent is not sent again.
@@ -488,6 +489,8 @@ local function OnVector(sender, v, k, n)
     if claim then Push({ msg = claim }) end
     local awards = ns.Awards and ns.Awards.Claim()
     if awards then Push({ msg = awards }) end
+    local belt = ns.Duels and ns.Duels.Claim()
+    if belt then Push({ msg = belt }) end
     if ns.Repair then ns.Repair.SendMine() end
     if ns.Probe then ns.Probe.SendMine() end
     if ns.Stats then ns.Stats.SendMine() end
@@ -639,6 +642,9 @@ function Comm.OnMessage(prefix, msg, channel, sender)
             end
             if changed then ns.Changed() end
         end
+    elseif kind == "B" then
+        local at = tonumber(msg:match("^B|(%d+)$"))
+        if at and ns.Duels then ns.Duels.HeardClaim(at) end
     elseif kind == "A" then
         local week = msg:match("^A|(%d+)$")
         if week and ns.Awards then ns.Awards.Heard(week) end
@@ -696,7 +702,7 @@ function Comm.HeardUpdateClaim(version)
 end
 
 -- What this version brings, for the line in guild chat. Change it with each release.
-Comm.UPDATE_NEWS = "for the Omen belt: the champion now has to defend it within 7 days"
+Comm.UPDATE_NEWS = "for 169 new death lines, lines per dungeon and weekly prizes that change"
 function Comm.UpdateLine()
     return ns.Toast.Fit("[Omen Deaths] Hey you! Omen Deaths " .. ns.VERSION .. " is out. Install the newest version "
         .. Comm.UPDATE_NEWS .. ": CurseForge app or " .. ns.DOWNLOAD)

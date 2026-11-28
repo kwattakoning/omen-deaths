@@ -556,9 +556,7 @@ for _, ev in ipairs({ "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED" }) do
         if markTry and ns.Safe(addon) == "OmenDeaths" then markTry.blocked = ev .. " " .. Seen(fn) end
     end)
 end
-ns.On("RAID_TARGET_UPDATE", function() if markTry then markTry.update = true end end)
-ns.On("PLAYER_TARGET_CHANGED", function()
-    if markTry then markTry.switched = true end
-    Safely(Probe.TryMark)
-end)
-ns.On("PLAYER_REGEN_DISABLED", function() Safely(Probe.TryMark) end)
+-- 0.9.14: the test is done and no longer runs. Blackrock Depths, 27-11-2026, party, not leader:
+-- SetRaidTarget gave ADDON_ACTION_FORBIDDEN "UNKNOWN()" calm and in a fight, no mark appeared.
+-- Every try showed the game's "blocked" popup, so marks by the addon are not possible in Forever.
+-- TryMark is kept for the record; nothing calls it.

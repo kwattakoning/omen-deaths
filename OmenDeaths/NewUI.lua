@@ -318,11 +318,8 @@ end
 -- Awards (0.9.8, redesign: the user could not tell what the tab meant). Three different prizes on
 -- stones of one height, so it does not read as a top 3; the prize is the headline, the score has
 -- its unit and one line says what it is for. Below it: who is on course this week.
-NewUI.AWARDS = {
-    { who = "top", n = "topN", title = "Death of the Week", unit = "death", help = "Died the most" },
-    { who = "faller", n = "fallN", title = "Floor Inspector", unit = "fall", help = "Fell the most" },
-    { who = "foe", n = "foeN", title = "Deadliest Foe", unit = "kill", help = "Killed the most of us", foe = true },
-}
+-- 0.9.14: the prizes vary per week (Awards.Prizes), so titles and help are set when filled.
+NewUI.AWARD_SLOTS = 3
 local AWARD_W, AWARD_H, AWARD_GAP = 164, 256, 12 -- three across the 516 of the list: (516 - 2 x 12) / 3
 
 local function BuildAwards()
@@ -335,14 +332,13 @@ local function BuildAwards()
     a.lastHead:SetText("Last Week's Winners")
     a.range = Label(page, "GameFontHighlightSmall", COL.muted)
     a.range:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -2)
-    for i, def in ipairs(NewUI.AWARDS) do
+    for i = 1, NewUI.AWARD_SLOTS do
         local t = NewGrave(page, AWARD_W, AWARD_H)
         t:SetPoint("TOPLEFT", page, "TOPLEFT", (i - 1) * (AWARD_W + AWARD_GAP), -26)
         t.title = Label(t, "GameFontNormalLarge")
         t.title:SetPoint("TOP", t, "TOP", 0, -48)
         t.title:SetWidth(AWARD_W - 50)
         t.title:SetJustifyH("CENTER")
-        t.title:SetText(def.title)
         t.name = Label(t, "GameFontHighlight")
         t.name:SetPoint("TOP", t, "TOP", 0, -122)
         t.name:SetWidth(AWARD_W - 34)
@@ -354,7 +350,6 @@ local function BuildAwards()
         t.help:SetPoint("BOTTOM", t, "BOTTOM", 0, NewUI.GRASS_H + 8)
         t.help:SetWidth(AWARD_W - 40)
         t.help:SetJustifyH("CENTER")
-        t.help:SetText(def.help)
         a.stones[i] = t
     end
     a.grass = Grass(page, page:GetFrameLevel() + 1, 516)
@@ -372,7 +367,7 @@ local function BuildAwards()
     rule:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -320)
     rule:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -320)
     rule:SetHeight(1)
-    for i, def in ipairs(NewUI.AWARDS) do
+    for i = 1, NewUI.AWARD_SLOTS do
         local r = CreateFrame("Frame", nil, page)
         r:SetSize(516, 40)
         r:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -322 - (i - 1) * 40)
@@ -384,7 +379,6 @@ local function BuildAwards()
         r.title:SetPoint("LEFT", r, "LEFT", 0, 0)
         r.title:SetWidth(180)
         r.title:SetJustifyH("LEFT")
-        r.title:SetText(def.title)
         r.name = Label(r, "GameFontHighlight")
         r.name:SetPoint("LEFT", r, "LEFT", 186, 0)
         r.name:SetWidth(210)
@@ -596,18 +590,25 @@ local function Online()
     return n .. (n == 1 and " guildie" or " guildies") .. " online"
 end
 
--- The three prizes of one week: { name, color, score ("14 deaths") }; name nil when nobody won it.
+-- The three prizes of one week: { title, help, name, color, score ("14 deaths") }; name nil when
+-- nobody won it.
+-- 0.9.14: the three most remarkable prizes of the week, the first one left; how far above a normal
+-- week goes under the explanation. A slot nobody won: empty.
+function NewUI.Times(t)
+    if type(t) ~= "number" then return nil end
+    return ("%.1fx a normal week"):format(math.floor(t * 10 + 0.5) / 10)
+end
 local function AwardList(book, a)
     local out = {}
-    for i, def in ipairs(NewUI.AWARDS) do
-        local who, n = a[def.who], a[def.n]
-        if who then
-            local p = not def.foe and book.players[who]
+    for i = 1, NewUI.AWARD_SLOTS do
+        local w = a.prizes[i]
+        out[i] = { title = "", help = "" }
+        if w and w.who then
+            local def = w.def
+            local p = not def.foe and book.players[w.who]
             local r, g, b = ns.ClassColor(p and p.class)
-            out[i] = { name = who, color = def.foe and COL.bone or { r, g, b },
-                score = n .. " " .. def.unit .. (n == 1 and "" or "s") }
-        else
-            out[i] = {}
+            out[i] = { title = def.title, help = def.help .. "\n" .. NewUI.Times(w.times), name = w.who,
+                color = def.foe and COL.bone or { r, g, b }, score = ns.Awards.Score(def, w.n) }
         end
     end
     return out
@@ -931,12 +932,15 @@ local function FillAwards(data)
     for i, t in ipairs(a.stones) do
         Show(t, data.hasWinners)
         local w = data.last[i]
+        t.title:SetText(w.title)
+        t.help:SetText(w.help)
         t.name:SetText(w.name or "Nobody")
         Paint(t.name, w.color or COL.muted)
         t.score:SetText(w.score or "-")
     end
     for i, r in ipairs(a.rows) do
         local w = data.now[i]
+        r.title:SetText(w.title)
         r.name:SetText(w.name or "Nobody yet")
         Paint(r.name, w.color or COL.muted)
         r.score:SetText(w.score or "-")

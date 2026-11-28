@@ -236,7 +236,7 @@ ns.On("PLAYER_LOGIN", function() Toast.HookClicks() end)
 function Toast.GuildLine(owner, rec, rank)
     local text, named = ns.Lines.For(rec, owner)
     local line = "[Omen Deaths] " .. text
-    local detail = ns.Lines.Detail(rec, named)
+    local detail = ns.Lines.Detail(rec, named, text)
     if detail ~= "" then line = line .. " - " .. detail end
     local n = ns.Data.CountFor(ns.Book(), owner, "week")
     if n > 0 then line = line .. ". Deaths this week: " .. n end
@@ -392,9 +392,9 @@ end
 local function Pick(list) return list[math.random(#list)] end
 
 -- "to Hogger (Rend) in The Deadmines · #3 this week"
-function Toast.Detail(owner, rec, named, week)
+function Toast.Detail(owner, rec, named, week, text)
     local parts = {}
-    local d = ns.Lines.Detail(rec, named)
+    local d = ns.Lines.Detail(rec, named, text)
     if d ~= "" then parts[#parts + 1] = d end
     local n = week or ns.Data.CountFor(ns.Book(), owner, "week")
     if n > 0 then parts[#parts + 1] = "#" .. n .. " this week" end
@@ -531,7 +531,7 @@ function Toast.Death(owner, rec, shared)
     else
         headline, named, template, n = ns.Lines.For(rec, owner)
     end
-    local detail = Toast.Detail(owner, rec, named, sharedText and shared.week or nil)
+    local detail = Toast.Detail(owner, rec, named, sharedText and shared.week or nil, headline)
     Toast.last = { headline = headline, detail = detail }
     if ns.db.settings.chat then
         -- the popup's line, with the name in class colour

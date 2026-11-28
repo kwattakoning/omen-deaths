@@ -20,7 +20,7 @@ This link always gives the newest version. The addon tells you in-game when a ne
 - All Time also counts the deaths from before you installed the addon (from the game's own statistics)
 - Killers: which mobs (and falls) kill us the most, with NPC portraits in the top 3
 - A funny line in guild chat when you die, fitting how you died: a fall, lava, your role in a dungeon,
-  a mob way above your level or a gray one. Die the same way again and it gets worse: streaks stand out
+  a mob way above your level or a gray one, and lines of their own for 24 dungeons. Die the same way again and it gets worse: streaks stand out
   with [3x STREAK] up front. Popups show the same line as guild chat.
   The "Guild chat" button switches it **On** (default) or **Off**. Battleground and arena deaths are never posted
   (and give no popup or sound), but they still count under Battlegrounds
@@ -28,7 +28,7 @@ This link always gives the newest version. The addon tells you in-game when a ne
   clean streak, dying right after a level-up and being one-shot, plus jokes for every class and role
 - All Time rank-ups: a short [Rank 33 > 32] on your line, and a line of its own when you pass someone in the top 3
 - A public shaming when you take the Spirit Healer's deal instead of walking back
-- Last week's awards in guild chat after the weekly reset: Death of the week, Floor Inspector, Deadliest foe
+- Last week's awards in guild chat after the weekly reset: the three most remarkable of Death of the Week, Floor Inspector, Deadliest Foe, Lava Lover, Fish Food, Dungeon Disaster and Grave Tourist, each compared with a normal week
 - Hall of Fame: one ranking of how far everyone got without dying. The living keep climbing, the fallen keep their place with a cross. An achievement every 10 levels and the biggest one at 60
 - Duels: one Omen duel ranking with one belt. Beat someone above you to take their place, one duel per pair per day counts, and the champion has to defend the belt within 7 days. See who is online and whisper a challenge
 - In raids, one summary in guild chat per boss fight instead of a line per death

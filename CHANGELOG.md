@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.14
+- Duels: a belt that goes to #2 after a week without a defense is now always announced in guild chat, also when the new champion is offline or has no addon. Once, by the first guildie with the addon who sees it
+- When the game blocks an action of the addon, the addon now remembers which one, so it can be fixed
+- 169 new death lines (366 in all, was 197): more for dungeons, the open world, every class and role, falls, lava, streaks and the special lines
+- Dungeon lines: a few lines of its own for 24 dungeons, from Blackrock Depths to The Stockade
+- The same line never comes twice in a row for the same player
+- Weekly awards: three prizes, and the three most remarkable of the week win. Each prize is compared with a normal week: 10 falls when 3 is normal beats a usual Death of the Week. Prizes: Death of the Week, Floor Inspector, Deadliest Foe, Lava Lover, Fish Food, Dungeon Disaster and Grave Tourist (died in the most places)
+- No more "blocked" popup from the game in dungeons. It came from a test of raid marks (only on the maker's own character); the test is done, marks by an addon are blocked in Forever
+
 ## 0.9.13
 - Duels: the champion has to defend the Omen belt within 7 days. No counted duel in a week and the belt goes to #2
 - The stone of the champion shows how long is left to defend

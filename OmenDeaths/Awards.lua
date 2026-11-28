@@ -26,35 +26,113 @@ local function Best(counts)
     return best, n
 end
 
--- From the deaths in [from, to): most deaths, most falls, the killer with most kills. Battlegrounds
--- not counted (as Everywhere on the leaderboard).
-function Awards.Compute(book, from, to)
-    local deaths, falls, foes = {}, {}, {}
+-- 0.9.14 (the user's choice): three prizes a week, and the three most remarkable ones win. Every
+-- prize compares its winner with a normal week: 10 falls when the winner usually has 3 is more
+-- remarkable than 31 deaths when the winner usually has 31. First prize = the most remarkable.
+-- Only prizes that had a winner in each of the 3 weeks measured (8-27 Nov 2026): falls 7-13
+-- guildies a week, lava 1-5, drowning 1-3, dungeon deaths 16-23, places 24-39, foes 128-199.
+-- Not taken: raids, gray mobs, one-shots (0 in all 3 weeks), duels (only in 1 of 3 weeks).
+-- count(r, name) gives the key that scores (a player, or the killer for the foe), or nil.
+-- normal = the winner's score in a normal week, the median of those 3 weeks: used only when the
+-- guild has no earlier week of its own yet.
+Awards.PRIZES = {
+    { id = "top", title = "Death of the Week", help = "Died the most", unit = "death", normal = 31 },
+    { id = "fall", title = "Floor Inspector", help = "Fell the most", unit = "fall", normal = 3,
+        count = function(r, name) return not r.k and r.s == "Falling" and name or nil end },
+    { id = "foe", title = "Deadliest Foe", help = "Killed the most of us", unit = "kill", foe = true, normal = 5,
+        count = function(r) return r.k end },
+    { id = "lava", title = "Lava Lover", help = "Most deaths to lava and fire", unit = "lava bath", units = "lava baths", normal = 1,
+        count = function(r, name) return not r.k and (r.s == "Lava" or r.s == "Fire") and name or nil end },
+    { id = "drown", title = "Fish Food", help = "Drowned the most", unit = "drowning", normal = 1,
+        count = function(r, name) return not r.k and (r.s == "Drowning" or r.s == "Fatigue") and name or nil end },
+    { id = "dungeon", title = "Dungeon Disaster", help = "Most deaths in dungeons", unit = "death", normal = 19,
+        count = function(r, name) return r.it == "party" and name or nil end },
+    { id = "places", title = "Grave Tourist", help = "Died in the most places", unit = "place", distinct = true, normal = 12,
+        count = function(r, name) return r.z and name or nil end },
+}
+Awards.SLOTS = 3
+-- A normal week = the average winner's score of the weeks before (up to BACK weeks that had any
+-- death). 4 = about a month; not measured: the guild has 3 weeks of data (since 8-11-2026).
+Awards.BACK = 4
+
+-- The winner of every prize in [from, to): { [i] = { def, who, n } }, and how many deaths in all.
+-- Battlegrounds not counted (as Everywhere on the leaderboard).
+function Awards.Tally(book, from, to)
+    local defs = Awards.PRIZES
+    local counts, places, total = {}, {}, 0
+    for i = 1, #defs do counts[i], places[i] = {}, {} end
     for name, p in pairs(book.players) do
         if ns.Data.Shown(name) then
             for t, r in pairs(p.deaths) do
                 if t >= from and t < to and ns.Data.InScope(r, nil) then
-                    deaths[name] = (deaths[name] or 0) + 1
-                    if not r.k and r.s == "Falling" then falls[name] = (falls[name] or 0) + 1 end
-                    if r.k then foes[r.k] = (foes[r.k] or 0) + 1 end
+                    total = total + 1
+                    for i, def in ipairs(defs) do
+                        local key = def.count and def.count(r, name) or (not def.count and name)
+                        if key and def.distinct then
+                            local seen = places[i][key] or {}
+                            places[i][key] = seen
+                            if seen[r.z] then key = nil else seen[r.z] = true end
+                        end
+                        if key then counts[i][key] = (counts[i][key] or 0) + 1 end
+                    end
                 end
             end
         end
     end
-    local a = {}
-    a.top, a.topN = Best(deaths)
-    a.faller, a.fallN = Best(falls)
-    a.foe, a.foeN = Best(foes)
+    local out = {}
+    for i, def in ipairs(defs) do
+        local who, n = Best(counts[i])
+        out[i] = { def = def, who = who, n = n }
+    end
+    return out, total
+end
+
+-- The normal winner's score of each prize, from the weeks before `from`.
+function Awards.Normal(book, from)
+    local sum, weeks = {}, 0
+    for back = 1, Awards.BACK do
+        local w, total = Awards.Tally(book, from - back * Awards.WEEK, from - (back - 1) * Awards.WEEK)
+        if total > 0 then
+            weeks = weeks + 1
+            for i, x in ipairs(w) do sum[i] = (sum[i] or 0) + (x.n or 0) end
+        end
+    end
+    local out = {}
+    for i, def in ipairs(Awards.PRIZES) do out[i] = weeks > 0 and sum[i] / weeks or def.normal end
+    return out
+end
+
+-- The three most remarkable prizes of [from, to), most remarkable first: a.prizes[i] = { def, who,
+-- n, times } (times = how many times a normal week). Below 1 = a normal winner: a floor of 1 keeps
+-- a rare prize with a normal of 0.3 from winning with a single death. Equal: the order of PRIZES.
+-- a.top = the first prize's winner (nil: nobody died).
+function Awards.Compute(book, from, to)
+    local w = Awards.Tally(book, from, to)
+    local normal = Awards.Normal(book, from)
+    local list = {}
+    for i, x in ipairs(w) do
+        if x.who then
+            x.times = x.n / math.max(normal[i], 1)
+            x.order = i
+            list[#list + 1] = x
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.times ~= b.times then return a.times > b.times end
+        return a.order < b.order
+    end)
+    local a = { prizes = {} }
+    for i = 1, math.min(Awards.SLOTS, #list) do a.prizes[i] = list[i] end
+    a.top = a.prizes[1] and a.prizes[1].who
     return a
 end
 
-local function Plural(n, word) return n .. " " .. word .. (n == 1 and "" or "s") end
+function Awards.Score(def, n) return n .. " " .. (n == 1 and def.unit or (def.units or (def.unit .. "s"))) end
 
 function Awards.Line(a)
-    local line = "[Omen Deaths] Last week's awards! Death of the week: " .. a.top .. " (" .. a.topN .. ")"
-    if a.faller then line = line .. ". Floor Inspector: " .. a.faller .. " (" .. Plural(a.fallN, "fall") .. ")" end
-    if a.foe then line = line .. ". Deadliest foe: " .. a.foe .. " (" .. Plural(a.foeN, "kill") .. ")" end
-    return ns.Toast.Fit(line)
+    local parts = {}
+    for _, w in ipairs(a.prizes) do parts[#parts + 1] = w.def.title .. ": " .. w.who .. " (" .. Awards.Score(w.def, w.n) .. ")" end
+    return ns.Toast.Fit("[Omen Deaths] Last week's awards! " .. table.concat(parts, ". "))
 end
 
 local function Seen(book, week)

@@ -106,7 +106,35 @@ function Duels.Check()
     local text = s.old .. " did not defend the Omen belt for " .. math.floor(Duels.DEFEND / 86400) .. " days. " .. s.new .. " is the new Omen champion!"
     if ns.db.settings.chat then ns.Print(text) end
     if ns.Toast.Champion then ns.Toast.Champion(s.new, s.old, true) end
-    if ns.SameChar(s.new, ns.MyName()) and ns.db.settings.guildChat then ns.Toast.Post("[Omen Deaths] " .. text, false, "c") end
+    Duels.PostTurn(s, text)
+end
+
+-- Guild chat once (0.9.14, the user: also when the new champion has no addon or is offline): the new
+-- champion first, then every online addon user in the fixed order of the boss summary (Wipe.Turn,
+-- Wipe.STEP). Whoever posts claims it (B|at); the claim is sent again to whoever logs in, as the
+-- Awards claim, so a later login does not post it again. Guild chat off: no turn, the others post.
+function Duels.PostTurn(s, text)
+    local book = ns.Book()
+    if (book.duelPosted or 0) >= s.at or not ns.db.settings.guildChat then return end
+    local turn = ns.SameChar(s.new, ns.MyName()) and 0 or ((ns.Wipe and ns.Wipe.Turn() or 0) + 1)
+    local function go()
+        if not ns.db or not ns.GuildName() or (ns.Book().duelPosted or 0) >= s.at then return end
+        ns.Book().duelPosted = s.at
+        ns.Comm.SendRaw("B|" .. s.at)
+        ns.Toast.Post("[Omen Deaths] " .. text, false, "c")
+    end
+    local wait = turn * (ns.Wipe and ns.Wipe.STEP or 1)
+    if wait > 0 and C_Timer and C_Timer.After then C_Timer.After(wait, go) else go() end
+end
+
+function Duels.Claim()
+    local at = ns.db and ns.GuildName() and ns.Book().duelPosted
+    if at then return "B|" .. at end
+end
+
+function Duels.HeardClaim(at)
+    local book = ns.Book()
+    if not book.duelPosted or at > book.duelPosted then book.duelPosted = at end
 end
 
 local function Tick()

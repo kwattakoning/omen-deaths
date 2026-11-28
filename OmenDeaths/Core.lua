@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 _G.OmenDeaths = ns
 
-ns.VERSION = "0.9.13"
+ns.VERSION = "0.9.14"
 -- The version told to the guild. A test copy (tools/deploy.ps1) sets ns.ANNOUNCE to the version on
 -- GitHub at the end of this file, so guildies are not told to update to a version they cannot
 -- download yet (08-11-2026). Unset = ns.VERSION.
@@ -108,6 +108,14 @@ function ns.NoteError(err, where)
     if type(e) ~= "table" or e.v ~= ns.VERSION then e = { n = 0, v = ns.VERSION } end
     e.n, e.text, e.at, e.event = e.n + 1, tostring(err):sub(1, 300), ns.Now and ns.Now() or nil, where
     ns.db.errors = e
+end
+
+-- The game's "blocked from an action" popup (Disable / Ignore), seen 27-11-2026 without knowing the
+-- action: which function it was is kept with the errors (and so in the Health report).
+for _, ev in ipairs({ "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED" }) do
+    ns.On(ev, function(addon, fn)
+        if addon == ADDON then ns.NoteError("blocked: " .. tostring(fn), ev) end
+    end)
 end
 
 frame:SetScript("OnEvent", function(_, event, ...)
